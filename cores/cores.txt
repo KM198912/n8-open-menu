@@ -1,0 +1,8 @@
+# n8-open core table -> MAPROUT.BIN (tools/mk_maprout.py)
+# <iNES mapper> <RBF number>     one line per mapper, # = comment
+# RBF number = file name in /EDFC/MAPS/ (100 -> 100.RBF)
+0   100     # NROM (cores/nrom)
+1   101     # MMC1 (cores/nrom, revision n8_mmc1)
+4   104     # MMC3 (cores/nrom, revision n8_mmc3)
+5   105     # MMC5 (cores/nrom, revision n8_mmc5)
+2   102     # UxROM (cores/nrom, revision n8_uxrom)

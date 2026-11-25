@@ -1,0 +1,73 @@
+# Testing
+
+Everything is tested offline before it goes onto the cartridge: the cores
+with Icarus Verilog, the menu in a 6502 + cartridge simulator.
+
+## Cores: Icarus Verilog testbenches
+
+```
+cores/tb/run.sh          (Icarus Verilog 12; on Windows through WSL:
+                          wsl -e sh /mnt/<path>/cores/tb/run.sh)
+```
+
+| Testbench | Covers |
+|---|---|
+| `tb_mmc1.v` | MMC1 serial port, PRG/CHR modes, mirroring, PRG RAM, SUROM |
+| `tb_mmc3.v` | MMC3 banking, PRG RAM protect, scanline IRQ with a PPU fetch model (A12 filter, latch 0, BG/sprite table layouts) |
+| `tb_mmc5.v` | MMC5 PRG/CHR/RAM, nametables, fill mode, ExRAM, scanline detection and IRQ from real PPU reads, 8x16 sets, extended attributes; monitors that the data buses are only driven when allowed |
+| `tb_simple.v` | discrete mappers (`-Ptb_simple.M=<mapper>`): UxROM |
+
+The testbenches drive real bus cycles (M2 low/high, data hold after the
+falling edge) and, where it matters, a PPU model with per-dot fetches.
+Icarus' `-P` only reaches parameters of the top module: testbenches set the
+DUT's `MAPPER` on the instance, or (tb_simple) have their own parameter.
+
+Each check set is validated with mutations: break one thing in the HDL
+(sed on a temporary copy), the testbench must fail. Long testbenches
+(MMC5: ~40 s per run) are best run in the background, one run per mutation.
+
+## Menu: simulator (`tools/n8sim`)
+
+```
+python tools/n8sim/run.py menu/build/OS.BIN --sd card.img [options]
+```
+
+| Option | |
+|---|---|
+| `--frames N`, `--press KEYS@FRAME` | run time; buttons `A B s(elect) S(tart) U D L R` |
+| `--our-boot-core` | the menu runs under our `255.RBF` (has the `$5000` window) |
+| `--expect-rbf FILE` | the configuration stream must equal this RBF |
+| `--abort-on-idle` | `$4402 = $03` during a stream aborts it (as on hardware) |
+| `--sdsc`, `--trace-sd`, `--sd-reject-writes` | byte-addressed card, SD log, card refuses writes |
+| `--sram FILE`, `--sram-dump P:OFF:LEN` | battery SRAM kept across runs (= power cycle), dump |
+| `--no-signature` | loaded cores act like foreign cores (no `$5000` window) |
+
+It reports the screen, PPU writes during rendering, CPU accesses to FPGA
+memory while the FPGA is configured, SD protocol errors, the core start
+(mapper and registers) and the CPU RAM the game starts with.
+
+SD images: `tools/mk_sdimg.py <folder> <out.img>` with `--mb`, `--spc N`,
+`--no-mbr`, `--fragment`, `--fsinfo` (real free count, as Windows writes it),
+`--shuffle SEED` (random directory order).
+
+FAT checks: `tools/fatcheck.py card.img [--tree] [--dump PATH]` - both FAT
+copies, chains, cross-links, lost clusters, LFN checksums, duplicates,
+FSInfo. Independent of the menu's code; WSL's `mtools` (`mdir -i img@@1M`)
+is a second, foreign opinion.
+
+Test builds of the menu: `ca65 -D SDW_TEST -I tests ...` (SD writes),
+`-D FATW_TEST [-D FT_COUNT=n -D FT_BASE=n]` (creating files/directories).
+
+## A/B test against a foreign core
+
+To find out whether a fault comes from our core or from elsewhere, the same
+game can be started on another core (e.g. the original firmware's, renamed):
+
+- build a diagnostic menu: `ca65 -D AB_TEST` - cores numbered 200 and up are
+  started without the `$5000` signature check;
+- a MAPROUT that sends the mapper to that number (copy `cores/cores.txt`,
+  change the line, `tools/mk_maprout.py <copy> <out>`);
+- put the foreign core on the card as `MAPS/2NN.RBF`.
+
+First use: Castlevania (USA) showed the same status bar fault on both cores
+and on the complete original firmware - an NTSC game on a PAL console.
