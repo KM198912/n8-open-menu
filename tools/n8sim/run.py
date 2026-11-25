@@ -33,6 +33,8 @@ def main():
     ap.add_argument("--sdsc", action="store_true", help="emulate a byte-addressed SDSC card")
     ap.add_argument("--sd-reject-writes", action="store_true", help="card answers every written block with a write error")
     ap.add_argument("--no-signature", action="store_true", help="loaded cores have no $5000 signature window (foreign cores)")
+    ap.add_argument("--region", choices=["ntsc", "pal", "dendy"], default="ntsc", help="console timing (cycles per frame)")
+    ap.add_argument("--prg-dump", action="append", default=[], help="OFFSET:LEN (hex) of PRG RAM to print at the end")
     ap.add_argument("--sram", help="battery save SRAM image: loaded at start (if it exists), saved at the end")
     ap.add_argument("--sram-dump", action="append", default=[], help="PAGE:OFFSET:LEN (hex) of save SRAM to print at the end")
     ap.add_argument("--immediate", action="store_true", help="auto-read returns the byte it clocks (hardware: previous byte)")
@@ -43,6 +45,7 @@ def main():
     args = ap.parse_args()
 
     msgs = []
+    N8Board.CYCLES_PER_FRAME = {"ntsc": 29780, "pal": 33248, "dendy": 35464}[args.region]
     board = N8Board(args.os_bin, args.sd, log=msgs.append, sdhc=not args.sdsc, expect_rbf=args.expect_rbf,
                     reject_writes=args.sd_reject_writes, no_signature=args.no_signature)
     if args.sram and os.path.exists(args.sram):
@@ -114,6 +117,9 @@ def main():
             sum(1 for b in r[0:0x100] if b), sum(1 for b in r[0x100:0x200] if b),
             sum(1 for b in r[0x200:0x300] if b), sum(1 for b in r[0x300:0x700] if b),
             sum(1 for b in r[0x700:0x800] if b)))
+    for d in args.prg_dump:
+        off, n = (int(x, 16) for x in d.split(":"))
+        print("PRG +%05X: %s" % (off, board.prg[off:off + n].hex(" ")))
     for d in args.sram_dump:
         page, off, n = (int(x, 16) for x in d.split(":"))
         base = page * 0x2000 + off

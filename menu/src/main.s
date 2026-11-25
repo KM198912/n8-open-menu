@@ -155,6 +155,18 @@ sv_n:       .res 1
 sv_have:    .res 1
 sv_name:    .res 64         ; <rom name>.sav
 order:      .res 128        ; list position -> LIST record (sorted, list_sort)
+console:    .res 1          ; console region (region.s: RG_NTSC/PAL/DENDY)
+gregion:    .res 1          ; region of the selected game
+pal_fix:    .res 1          ; 1 = NTSC game on a PAL console: correct
+no_fix:     .res 1          ; B was held when A started the game
+rg_try:     .res 1
+rg_p:       .res 1
+rg_s:       .res 1
+pt_clen:    .res 1          ; pal_patches: entry fields
+pt_poff:    .res 1
+pt_plen:    .res 1
+pt_pbase:   .res 1
+pt_len:     .res 1
 
 .segment "CHARS"
     .incbin "font.chr"
@@ -232,6 +244,7 @@ reset:
     sta N8_IDX
     lda #8
     sta N8_DAT
+    jsr region_detect       ; NTSC / PAL / Dendy console (region.s)
 
     jsr menu_gfx
     lda #0
@@ -456,6 +469,9 @@ activate:
     jsr gotoxy_off          ; before CHR, so the screen changes once, from
     PRINT "LOADING...                    "  ; the text to black - no flashing
     jsr show
+    lda joy                 ; B held with A: no NTSC-on-PAL correction
+    and #BTN_B
+    sta no_fix
     jsr launch              ; returns only on error
     sta err
     jsr menu_gfx
@@ -635,10 +651,9 @@ draw_status:
     lda err
     cmp #$43
     bne @pad
-    lda #' '
-    sta PPUDATA
-    lda mapper
-    jsr puthex
+    lda mapper              ; decimal, right-aligned in 5 like the info screen
+    ldx #0                  ; (iNES mapper numbers are decimal everywhere)
+    jsr putdec
 @pad:
 @nomsg:
     ldx #8                  ; clear the rest of the line
@@ -951,6 +966,7 @@ nmi:
 .include "fatw.s"
 .include "loader.s"
 .include "save.s"
+.include "region.s"
 .include "ramload.s"
 .include "rominfo.s"
 .ifdef SDW_TEST

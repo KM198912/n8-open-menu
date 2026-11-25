@@ -52,6 +52,7 @@ set_global_assignment -name VERILOG_FILE ../nrom/map_mmc1.v
 set_global_assignment -name VERILOG_FILE ../nrom/map_mmc3.v
 set_global_assignment -name VERILOG_FILE ../nrom/map_mmc5.v
 set_global_assignment -name VERILOG_FILE ../nrom/map_simple.v
+set_global_assignment -name VERILOG_FILE ../nrom/map_vrc6.v
 
 # configuration: passive serial from the MAX II, RBF output
 set_global_assignment -name CYCLONEII_CONFIGURATION_SCHEME "PASSIVE SERIAL"

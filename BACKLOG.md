@@ -32,7 +32,7 @@
   audio on `cpu_exp`, saves > 8 KB (Koei: 32 KB). Open detail: the
   background prefetch of line 0 happens before "in frame" is set, so its two
   tiles get neither the 8x16 set B nor extended attributes (not seen yet).
-- **VRC6** (mappers 24/26, next): banking + CPU-cycle IRQ first, then audio.
+- **VRC6 audio** (phase 2): banking + IRQ are done, see below.
   Audio level: per-chip default calibrated to the 2A03 ratio + a per-chip
   gain in the menu (Krikzz's "audio balance" is per chip, 0-200%; VRC6 needs
   ~160-200% there on stock/AV-modded Famicoms, r/everdrive 15c8w2v).
@@ -50,6 +50,23 @@
   MMC6 (StarTropics, mapper 4 with different PRG RAM) are not supported.
 
 ## Done
+
+- **NTSC games on PAL consoles** (2026-11-25): menu `src/region.s`
+  measures the console (15-cycle loop between vblank flags: NTSC ~1985,
+  PAL ~2217, Dendy ~2364 passes) and the game's region (NES 2.0 byte 12,
+  iNES byte 9 with a clean header, file name); NTSC game on PAL -> `$86`
+  bit 6 and the patch list (first entry: Castlevania (USA) `$F8CA` BEQ ->
+  NOP NOP, checked against 12 original bytes). VRC6 core: PAL prescaler
+  (1705 - 16 per cycle) + vblank hold (capped at 5400 cycles). B held with
+  A = off. Hardware: Akumajou Densetsu and Castlevania (USA) keep their
+  status bars on the PAL console; with B held both break again. Simulator
+  `--region ntsc|pal|dendy`, `--prg-dump`. Further cycle-IRQ cores
+  (VRC4/7, FME-7, Namco 163) should honour bit 6 the same way.
+- **VRC6 phase 1** (2026-11-25): `cores/nrom/map_vrc6.v`, revisions
+  `n8_vrc6a` / `n8_vrc6b` -> `124` / `126.RBF`; `$B003` mode 0 only (all
+  three Konami games); `tb_vrc6.v` 53 checks incl. an NTSC/PAL PPU model,
+  mutations caught. Hardware: Akumajou Densetsu.
+- **Error line shows the mapper in decimal** (was hex: `$18` read as 18).
 
 - **CNROM, AxROM, GxROM** (2026-11-25): `map_simple.v` branches, revisions
   `n8_cnrom` / `n8_axrom` / `n8_gxrom` -> `103` / `107` / `166.RBF`;

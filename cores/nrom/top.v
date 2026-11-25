@@ -31,7 +31,7 @@ module n8_top #(
     // bug in the loader); the menu core 255 (cores/nrom_noret) uses 0.
     parameter RET_MENU = 0,
     // iNES mapper of this build: 0 = NROM, 1 = MMC1, 2 = UxROM, 3 = CNROM,
-    // 4 = MMC3, 5 = MMC5, 7 = AxROM, 66 = GxROM
+    // 4 = MMC3, 5 = MMC5, 7 = AxROM, 24/26 = VRC6a/b, 66 = GxROM
     parameter MAPPER = 0
 ) (
     // CPU bus
@@ -166,6 +166,20 @@ module n8_top #(
                 .cpu_addr(cpu_addr), .cpu_ce(cpu_ce), .cpu_rw(cpu_rw),
                 .ppu_addr(ppu_addr), .ppu_wr(ppu_wr),
                 .chr_is_ram(chr_is_ram), .map_cfg(map_cfg),
+                .prg_a(gm_prg_a), .prg_rom(gm_prg_rom), .prg_ram(gm_prg_ram), .prg_wr(gm_prg_wr),
+                .chr_a(gm_chr_a), .chr_sel(gm_chr_sel), .chr_wr(gm_chr_wr),
+                .ciram_a10(gm_ciram_a10), .ciram_sel(gm_ciram_sel), .irq(gm_irq)
+            );
+            assign gm_cpu_oe = 1'b0;  assign gm_cpu_do = 8'h00;
+            assign gm_ppu_oe = 1'b0;  assign gm_ppu_do = 8'h00;
+        end else if (MAPPER == 24 || MAPPER == 26) begin : g_vrc6
+            // Konami VRC6 (26: A0/A1 swapped); held in power-on state in menu mode
+            map_vrc6 #(.MAPPER(MAPPER)) vrc6 (
+                .mclk(mclk), .m2(cpu_m2), .clk(clk), .ppu_rd(ppu_rd), .map_cfg(map_cfg),
+                .rst(os_mode), .cpu_dat(cpu_dat),
+                .cpu_addr(cpu_addr), .cpu_ce(cpu_ce), .cpu_rw(cpu_rw),
+                .ppu_addr(ppu_addr), .ppu_wr(ppu_wr),
+                .chr_is_ram(chr_is_ram),
                 .prg_a(gm_prg_a), .prg_rom(gm_prg_rom), .prg_ram(gm_prg_ram), .prg_wr(gm_prg_wr),
                 .chr_a(gm_chr_a), .chr_sel(gm_chr_sel), .chr_wr(gm_chr_wr),
                 .ciram_a10(gm_ciram_a10), .ciram_sel(gm_ciram_sel), .irq(gm_irq)

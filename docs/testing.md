@@ -41,6 +41,8 @@ python tools/n8sim/run.py menu/build/OS.BIN --sd card.img [options]
 | `--sdsc`, `--trace-sd`, `--sd-reject-writes` | byte-addressed card, SD log, card refuses writes |
 | `--sram FILE`, `--sram-dump P:OFF:LEN` | battery SRAM kept across runs (= power cycle), dump |
 | `--no-signature` | loaded cores act like foreign cores (no `$5000` window) |
+| `--region ntsc\|pal\|dendy` | console timing (cycles per frame) for the region detection |
+| `--prg-dump OFF:LEN` | PRG RAM bytes at the end (e.g. to check a PAL patch) |
 
 It reports the screen, PPU writes during rendering, CPU accesses to FPGA
 memory while the FPGA is configured, SD protocol errors, the core start

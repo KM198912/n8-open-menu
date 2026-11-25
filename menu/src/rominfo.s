@@ -138,6 +138,7 @@ rom_info:
     PRINT "INES"
 
 @support:
+    jsr info_region         ; region line (region.s)
     lda #14
     ldx #INFO_COL
     jsr gotoxy

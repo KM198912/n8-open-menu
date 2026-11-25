@@ -121,6 +121,7 @@ launch:
     bcc @hdr_ok
     rts
 @hdr_ok:
+    jsr pal_decide          ; NTSC game on a PAL console? (region.s)
     lda hdr+4               ; PRG 16 KB units: 1..32
     beq @badsize
     cmp #33
@@ -222,6 +223,10 @@ launch:
     bcc @prg_done
     rts
 @prg_done:
+    lda pal_fix             ; known NTSC-only code: PAL patches (region.s)
+    beq @nopatch
+    jsr pal_patches
+@nopatch:
     lda #FPGA_PRG_PAGE      ; diagnostics: read back game $8000 and $C000
     sta N8_IDX
     lda #0
@@ -301,6 +306,10 @@ launch:
     sta cfg_chr
     lda hdr+6
     and #$01                ; 1 = vertical mirroring
+    ldx pal_fix
+    beq @cfg
+    ora #$40                ; bit 6: NTSC game on PAL - cores correct IRQ timing
+@cfg:
     sta cfg_map
 
     ; --- copy the RAM part and run it (never returns)

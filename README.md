@@ -32,10 +32,34 @@ in `docs/hw-interface.md`.
 | MMC3 (4) | `104.RBF` |
 | MMC5 (5) | `105.RBF` - banking, ExRAM, fill mode, scanline IRQ, extended attributes; no split screen, no audio yet |
 | AxROM (7) | `107.RBF` |
+| VRC6 (24, 26) | `124.RBF`, `126.RBF` - banking, IRQ; no audio yet |
 | GxROM (66) | `166.RBF` |
 
-Planned: VRC6, MMC5 split and audio, FDS. Open items
+Planned: VRC6 audio, MMC5 split and audio, FDS. Open items
 and test results: `BACKLOG.md`.
+
+## NTSC games on PAL consoles
+
+Many NTSC games (USA, Japan) lose their status bar on a PAL console: the
+PAL vblank is about 50 lines longer and a line has fewer CPU cycles, so
+splits timed for NTSC fire too early. n8-open corrects this where it can:
+
+- The menu measures the console's region at power-on (NTSC, PAL or Dendy)
+  and reads the game's region from the NES 2.0 header, the iNES PAL flag or
+  the file name ("(Europe)", "(E)", "(PAL)"; otherwise NTSC).
+- For an NTSC game on a PAL console, cores with CPU-cycle IRQs (VRC6 so
+  far) count PAL lines and skip the extra vblank time. Example: Akumajou
+  Densetsu's status bar.
+- Games whose own code times out get a small patch while loading, from a
+  verified list (`menu/src/region.s`); the ROM file is not changed, and the
+  patch is only applied if every original byte at the spot matches.
+  Example: Castlevania (USA).
+- The info screen (Select) shows `REGION   NTSC ON PAL NES: FIX` when this
+  applies. Holding B while starting the game with A turns it off.
+
+What it cannot change: the game runs at 50 instead of 60 frames per second
+(slower game and music), and timing problems in games not covered by the
+list. MMC3 games count real PPU lines and need no correction.
 
 ## Layout
 

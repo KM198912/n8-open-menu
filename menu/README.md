@@ -16,6 +16,9 @@ from `docs/hw-interface.md`. The cartridge's BIOS (in its flash) loads it from
   the FPGA by code running in CPU RAM (`src/ramload.s`), CPU RAM is cleared
   as after power-on, and the game starts through its reset vector.
   "LOADING..." stays on screen during PRG; no flashing colours.
+- NTSC games on a PAL console: region detection, IRQ correction in the
+  cores (`$86` bit 6) and verified patches for known cases
+  (`src/region.s`); B held with A starts without it. See `../README.md`.
 - Battery saves: raw 8 KB `/EDFC/SAVE/<rom name>.sav` (the format emulators
   use), loaded at game start, written back at the next power-on
   ("SAVING..."). Details and safety checks: `src/save.s`.
@@ -38,6 +41,7 @@ Not yet: Game Genie, save states, trainers, save sizes other than 8 KB.
 | `src/ramload.s` | code that runs from CPU RAM while the FPGA is reconfigured |
 | `src/save.s` | battery saves |
 | `src/rominfo.s` | the info screen |
+| `src/region.s` | console/game region, NTSC-on-PAL decision, patch list |
 | `tests/` | test builds (`-D SDW_TEST`, `-D FATW_TEST`) and `hello.nes` |
 
 ## Build
