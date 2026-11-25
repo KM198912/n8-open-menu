@@ -1,0 +1,54 @@
+# n8-open: only sources go into the repository.
+
+# ---- never: ROMs, disk images, saves, BIOS/firmware dumps, built cores
+# (game data comes from the user's own carts; the original firmware is not ours)
+*.nes
+*.NES
+*.fds
+*.FDS
+*.unf
+*.sav
+*.SAV
+*.img
+*.bin
+*.BIN
+*.rbf
+*.RBF
+
+# ---- local test data (see test/README.md for what lives there)
+test/*
+!test/README.md
+
+# ---- build output
+menu/build/
+menu/font.chr
+*.o
+*.map
+*.lbl
+
+# Quartus II 13.0
+db/
+incremental_db/
+output_files/
+greybox_tmp/
+simulation/
+*.qws
+*.rpt
+*.summary
+*.smsg
+*.done
+*.jdi
+*.pin
+*.sof
+*.pof
+*.qdf
+PLLJ_PLLSPE_INFO.txt
+
+# Icarus testbenches: compiled vvp scripts (no extension)
+cores/tb/*
+!cores/tb/*.v
+!cores/tb/run.sh
+
+# Python
+__pycache__/
+*.pyc
