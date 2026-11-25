@@ -28,10 +28,13 @@ in `docs/hw-interface.md`.
 | NROM (0) | `100.RBF` |
 | MMC1 (1) | `101.RBF` |
 | UxROM (2) | `102.RBF` |
+| CNROM (3) | `103.RBF` |
 | MMC3 (4) | `104.RBF` |
 | MMC5 (5) | `105.RBF` - banking, ExRAM, fill mode, scanline IRQ, extended attributes; no split screen, no audio yet |
+| AxROM (7) | `107.RBF` |
+| GxROM (66) | `166.RBF` |
 
-Planned: VRC6, CNROM/AxROM/GxROM, MMC5 split and audio, FDS. Open items
+Planned: VRC6, MMC5 split and audio, FDS. Open items
 and test results: `BACKLOG.md`.
 
 ## Layout

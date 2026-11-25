@@ -27,7 +27,7 @@
 - `hello.nes`: some letters red although the attribute table is now cleared
   (check whether the fixed ROM was on the card).
 - Not implemented yet: Game Genie, save states, trainers, more
-  mappers (simple ones next: CNROM 3, AxROM 7, GxROM 66 - map_simple.v branches).
+  mappers (next: VRC6).
 - MMC5 phase 3-4: vertical split (Uchuu Keibitai SDF, Bandit Kings ending),
   audio on `cpu_exp`, saves > 8 KB (Koei: 32 KB). Open detail: the
   background prefetch of line 0 happens before "in frame" is set, so its two
@@ -50,6 +50,11 @@
   MMC6 (StarTropics, mapper 4 with different PRG RAM) are not supported.
 
 ## Done
+
+- **CNROM, AxROM, GxROM** (2026-11-25): `map_simple.v` branches, revisions
+  `n8_cnrom` / `n8_axrom` / `n8_gxrom` -> `103` / `107` / `166.RBF`;
+  `tb_simple.v` 17 / 20 / 19 checks, 7 mutations caught. Hardware:
+  Solomon's Key, Battletoads, Super Mario Bros. / Duck Hunt.
 
 - **UxROM** (2026-11-25): `cores/nrom/map_simple.v` (MAPPER 2), revision
   `n8_uxrom` -> `102.RBF`; `tb_simple.v` 30 checks, 5 mutations caught.

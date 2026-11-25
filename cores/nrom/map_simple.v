@@ -1,7 +1,12 @@
 // n8-open: simple discrete-logic mappers for the EverDrive N8 clone, one per
 // build (parameter MAPPER, folded at synthesis):
-//   2  UxROM   16 KB at $8000 switchable, last 16 KB fixed at $C000, CHR RAM
-// (CNROM 3, AxROM 7, GxROM 66 to follow as further branches.)
+//   2  UxROM   16 KB at $8000 switchable (bits 4:0), last 16 KB fixed at $C000,
+//              CHR RAM, header mirroring
+//   3  CNROM   PRG fixed 16/32 KB, 8 KB CHR bank (bits 5:0), header mirroring
+//   7  AxROM   32 KB PRG bank (bits 3:0), CHR RAM, one-screen mirroring from
+//              bit 4 (0 = lower, 1 = upper nametable)
+//  66  GxROM   32 KB PRG bank (bits 5:4), 8 KB CHR bank (bits 1:0), header
+//              mirroring
 //
 // Written from the public mapper documentation (NESdev wiki), not from any
 // existing HDL. One register: any CPU write to $8000-$FFFF, taken on the
@@ -58,7 +63,11 @@ module map_simple #(
             prg_a = { 6'b000000, cpu_addr[12:10] };          // PRG RAM, 8 KB
         else if (MAPPER == 2)                                // UxROM
             prg_a = { (cpu_addr[14] ? 5'b11111 : bank[4:0]), cpu_addr[13:10] };
-        else
+        else if (MAPPER == 7)                                // AxROM: 32 KB
+            prg_a = { bank[3:0], cpu_addr[14:10] };
+        else if (MAPPER == 66)                               // GxROM: 32 KB
+            prg_a = { 2'b00, bank[5:4], cpu_addr[14:10] };
+        else                                                 // CNROM: fixed
             prg_a = { 4'b0000, cpu_addr[14:10] };
     end
     assign prg_rom = rom_area;
@@ -66,12 +75,16 @@ module map_simple #(
     assign prg_wr  = ram_area & m2 & ~cpu_rw;
 
     // ---------------------------------------------------------------- CHR
-    assign chr_a   = { 6'b000000, ppu_addr[12:10] };         // UxROM: 8 KB CHR RAM
+    // CNROM / GxROM: 8 KB CHR bank; UxROM / AxROM: 8 KB CHR RAM
+    assign chr_a   = (MAPPER == 3)  ? { bank[5:0], ppu_addr[12:10] } :
+                     (MAPPER == 66) ? { 4'b0000, bank[1:0], ppu_addr[12:10] } :
+                                      { 6'b000000, ppu_addr[12:10] };
     assign chr_sel = ~ppu_addr[13];
     assign chr_wr  = chr_is_ram & ~ppu_addr[13] & ~ppu_wr;
 
     // ---------------------------------------------------------------- mirroring
-    assign ciram_a10 = map_cfg[0] ? ppu_addr[10] : ppu_addr[11];
+    assign ciram_a10 = (MAPPER == 7) ? bank[4] :                 // AxROM: one screen
+                       map_cfg[0] ? ppu_addr[10] : ppu_addr[11];   // header
     assign ciram_sel = ppu_addr[13];
 
     assign irq = 1'b0;

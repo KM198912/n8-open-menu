@@ -8,7 +8,7 @@ for tb in tb_mmc1 tb_mmc3 tb_mmc5; do
     iverilog -g2005 -o $tb $tb.v $SRC
     vvp -n $tb | grep -v '\$finish'
 done
-for m in 2; do
+for m in 2 3 7 66; do
     echo "== tb_simple (mapper $m)"
     iverilog -g2005 -Ptb_simple.M=$m -o tb_simple tb_simple.v $SRC
     vvp -n tb_simple | grep -v '\$finish'

@@ -30,8 +30,8 @@ module n8_top #(
     // cores use 1 (the start-up failures once blamed on it were the SD CRC
     // bug in the loader); the menu core 255 (cores/nrom_noret) uses 0.
     parameter RET_MENU = 0,
-    // iNES mapper of this build: 0 = NROM, 1 = MMC1, 2 = UxROM, 4 = MMC3,
-    // 5 = MMC5
+    // iNES mapper of this build: 0 = NROM, 1 = MMC1, 2 = UxROM, 3 = CNROM,
+    // 4 = MMC3, 5 = MMC5, 7 = AxROM, 66 = GxROM
     parameter MAPPER = 0
 ) (
     // CPU bus
@@ -159,7 +159,7 @@ module n8_top #(
                 .ciram_a10(gm_ciram_a10), .ciram_sel(gm_ciram_sel), .irq(gm_irq),
                 .cpu_do(gm_cpu_do), .cpu_oe(gm_cpu_oe), .ppu_do(gm_ppu_do), .ppu_oe(gm_ppu_oe)
             );
-        end else if (MAPPER == 2) begin : g_simple
+        end else if (MAPPER == 2 || MAPPER == 3 || MAPPER == 7 || MAPPER == 66) begin : g_simple
             // simple discrete mappers (map_simple.v)
             map_simple #(.MAPPER(MAPPER)) simple (
                 .mclk(mclk), .m2(cpu_m2), .rst(os_mode), .cpu_dat(cpu_dat),

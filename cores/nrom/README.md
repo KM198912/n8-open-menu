@@ -8,6 +8,9 @@ revision sets the `MAPPER` parameter and becomes its own RBF:
 | 0 NROM      | `n8_nrom` | `map_nrom.v` | `/EDFC/MAPS/100.RBF`   |
 | 1 MMC1      | `n8_mmc1` | `map_mmc1.v` | `/EDFC/MAPS/101.RBF`   |
 | 2 UxROM     | `n8_uxrom`| `map_simple.v` | `/EDFC/MAPS/102.RBF` |
+| 3 CNROM     | `n8_cnrom`| `map_simple.v` | `/EDFC/MAPS/103.RBF` |
+| 7 AxROM     | `n8_axrom`| `map_simple.v` | `/EDFC/MAPS/107.RBF` |
+| 66 GxROM    | `n8_gxrom`| `map_simple.v` | `/EDFC/MAPS/166.RBF` |
 | 4 MMC3      | `n8_mmc3` | `map_mmc3.v` | `/EDFC/MAPS/104.RBF`   |
 | 5 MMC5      | `n8_mmc5` | `map_mmc5.v` | `/EDFC/MAPS/105.RBF`   |
 

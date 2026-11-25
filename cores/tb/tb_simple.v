@@ -72,6 +72,10 @@ module tb_simple;
     task prg16(input [15:0] addr, input [4:0] want, input [255:0] what);
         begin rd(addr); check(what, s_prg_map[8:4], want); check({what, " /CE"}, s_prg_ce, 0); end
     endtask
+    // 8 KB CHR bank seen by a PPU read (chr_map[8:3] = A13-A18)
+    task chr8(input [13:0] addr, input [5:0] want, input [255:0] what);
+        begin pa = addr; #20; rd(16'h0000); check(what, s_chr_map[8:3], want); end
+    endtask
     task a10_at(input [13:0] addr, input want, input [255:0] what);
         begin pa = addr; #20; rd(16'h0000); check(what, s_a10, want); end
     endtask
@@ -128,6 +132,82 @@ module tb_simple;
             // ---- back to the menu: register cleared
             setup(8'h0F, 8'h80, 8'h00);
             prg16(16'h8000, 5'd0, "UxROM: bank cleared by the menu");
+        end
+
+        if (M == 3) begin
+            // ---- CNROM: 32 KB PRG (2 x 16 KB), 32 KB CHR ROM (4 x 8 KB), vertical
+            setup(8'h01, 8'h03, 8'h01);
+            prg16(16'h8000, 5'd0, "CNROM $8000 = PRG 16K bank 0");
+            prg16(16'hC000, 5'd1, "CNROM $C000 = PRG 16K bank 1");
+            chr8(14'h0000, 6'd0, "CNROM power-on CHR bank 0");
+            wr(16'h8000, 8'h02);
+            chr8(14'h0000, 6'd2, "CNROM CHR bank 2 at $0000");
+            chr8(14'h1C00, 6'd2, "CNROM CHR bank 2 at $1C00 (8 KB)");
+            prg16(16'hC000, 5'd1, "CNROM PRG unchanged by the write");
+            wr(16'hE000, 8'h07);                      // beyond 32 KB CHR: masked
+            chr8(14'h0400, 6'd3, "CNROM CHR bank 7 & 3 = 3");
+            a10_at(14'h2400, 1, "CNROM vertical: $2400 -> A10 = 1");
+            pa = 14'h0400; ppu_wr = 0; #50;
+            check("CNROM: CHR ROM not writable", chr_we, 1);
+            ppu_wr = 1; #50;
+            // ---- 16 KB PRG (NROM-128 layout), 64 KB CHR, horizontal
+            setup(8'h00, 8'h07, 8'h00);
+            prg16(16'hC000, 5'd0, "CNROM 16 KB PRG mirrored at $C000");
+            wr(16'h8000, 8'h05);
+            chr8(14'h0000, 6'd5, "CNROM 64 KB CHR: bank 5");
+            a10_at(14'h2800, 1, "CNROM horizontal: $2800 -> A10 = 1");
+            setup(8'h00, 8'h07, 8'h00);
+            chr8(14'h0000, 6'd0, "CNROM: CHR bank cleared by the menu");
+        end
+
+        if (M == 7) begin
+            // ---- AxROM: 256 KB PRG (8 x 32 KB), CHR RAM
+            setup(8'h0F, 8'h80, 8'h00);
+            prg16(16'h8000, 5'd0, "AxROM power-on $8000 = 16K bank 0");
+            prg16(16'hC000, 5'd1, "AxROM power-on $C000 = 16K bank 1 (32 KB bank 0)");
+            a10_at(14'h2400, 0, "AxROM one-screen lower: $2400 -> A10 = 0");
+            a10_at(14'h2C00, 0, "AxROM one-screen lower: $2C00 -> A10 = 0");
+            wr(16'h8000, 8'h03);
+            prg16(16'h8000, 5'd6, "AxROM 32 KB bank 3: $8000 = 16K bank 6");
+            prg16(16'hFFFC, 5'd7, "AxROM 32 KB bank 3: $C000 = 16K bank 7");
+            wr(16'hA000, 8'h13);                      // bit 4: upper nametable
+            a10_at(14'h2000, 1, "AxROM one-screen upper: $2000 -> A10 = 1");
+            a10_at(14'h2800, 1, "AxROM one-screen upper: $2800 -> A10 = 1");
+            prg16(16'h8000, 5'd6, "AxROM bit 4 does not change the PRG bank");
+            wr(16'h8000, 8'h0F);                      // 32 KB bank 15: masked to 7
+            prg16(16'h8000, 5'd14, "AxROM bank 15 & 7 = 7 (256 KB)");
+            pa = 14'h1C00; #20; rd(16'h0000);
+            check("AxROM CHR RAM: 8 KB, no banking", s_chr_map, 9'd7);
+            pa = 14'h0400; ppu_wr = 0; #50;
+            check("AxROM CHR RAM writable", chr_we, 0);
+            ppu_wr = 1; #50;
+            setup(8'h0F, 8'h80, 8'h00);
+            prg16(16'h8000, 5'd0, "AxROM: bank cleared by the menu");
+        end
+
+        if (M == 66) begin
+            // ---- GxROM: 128 KB PRG (4 x 32 KB), 32 KB CHR (4 x 8 KB), vertical
+            setup(8'h07, 8'h03, 8'h01);
+            prg16(16'h8000, 5'd0, "GxROM power-on PRG bank 0");
+            chr8(14'h0000, 6'd0, "GxROM power-on CHR bank 0");
+            wr(16'h8000, 8'h21);                      // PRG 2, CHR 1
+            prg16(16'h8000, 5'd4, "GxROM PRG 32 KB bank 2: $8000 = 16K 4");
+            prg16(16'hC000, 5'd5, "GxROM PRG 32 KB bank 2: $C000 = 16K 5");
+            chr8(14'h1000, 6'd1, "GxROM CHR bank 1 from the same write");
+            wr(16'hF000, 8'h33);                      // PRG 3, CHR 3
+            prg16(16'hC000, 5'd7, "GxROM PRG bank 3: $C000 = 16K 7");
+            chr8(14'h0000, 6'd3, "GxROM CHR bank 3");
+            a10_at(14'h2400, 1, "GxROM vertical: $2400 -> A10 = 1");
+            // SMB / Duck Hunt layout: 64 KB PRG, 16 KB CHR
+            setup(8'h03, 8'h01, 8'h01);
+            wr(16'h8000, 8'h11);
+            prg16(16'h8000, 5'd2, "GxROM 64 KB: PRG bank 1 = 16K 2");
+            chr8(14'h0000, 6'd1, "GxROM 16 KB CHR: bank 1");
+            wr(16'h8000, 8'h33);                      // masked: PRG 1, CHR 1
+            prg16(16'hC000, 5'd3, "GxROM 64 KB: PRG 3 & 1 = 1");
+            chr8(14'h0000, 6'd1, "GxROM 16 KB CHR: 3 & 1 = 1");
+            setup(8'h03, 8'h01, 8'h01);
+            chr8(14'h0000, 6'd0, "GxROM: banks cleared by the menu");
         end
 
         $display("mapper %0d: %0d checks, %0d failed", M, checks, fails);

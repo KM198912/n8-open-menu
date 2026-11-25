@@ -6,3 +6,6 @@
 4   104     # MMC3 (cores/nrom, revision n8_mmc3)
 5   105     # MMC5 (cores/nrom, revision n8_mmc5)
 2   102     # UxROM (cores/nrom, revision n8_uxrom)
+3   103     # CNROM (cores/nrom, revision n8_cnrom)
+7   107     # AxROM (cores/nrom, revision n8_axrom)
+66  166     # GxROM (cores/nrom, revision n8_gxrom)
