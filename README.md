@@ -54,3 +54,13 @@ leaves a detail open, the source says what was inferred and how it was
 confirmed.
 
 No game ROMs, BIOS images or firmware dumps are part of this repository.
+
+## License
+
+n8-open is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option)
+any later version. See `LICENSE`.
+
+Whoever distributes built cores (`.RBF`) or menus (`OS.BIN`) must offer the
+corresponding sources under the same terms.
