@@ -9,6 +9,16 @@ battery-backed save SRAM, the BIOS in flash. n8-open replaces what lives on
 the SD card - `/EDFC/OS.BIN`, `/EDFC/MAPROUT.BIN` and `/EDFC/MAPS/*.RBF`;
 the cartridge's own BIOS stays as it is and starts it.
 
+## Caveat: the BIOS
+
+The BIOS in the clone's flash is most likely an older version of Krikzz's
+original firmware: on the cartridge n8-open was developed on, its error
+screen (missing files) points to Krikzz's website. n8-open deliberately
+leaves it untouched - reflashing it risks bricking the cartridge, and
+recovery would need a programmer or JTAG. So n8-open depends on that BIOS
+to load `OS.BIN` and the cores from the SD card; what is known about it is
+in `docs/hw-interface.md`.
+
 ## Status
 
 | | |
