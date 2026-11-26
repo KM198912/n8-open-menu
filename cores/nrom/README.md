@@ -15,8 +15,12 @@ revision sets the `MAPPER` parameter and becomes its own RBF:
 | 66 GxROM    | `n8_gxrom`| `map_simple.v` | `/EDFC/MAPS/166.RBF` |
 | 4 MMC3      | `n8_mmc3` | `map_mmc3.v` | `/EDFC/MAPS/104.RBF`   |
 | 5 MMC5      | `n8_mmc5` | `map_mmc5.v` | `/EDFC/MAPS/105.RBF`   |
+| FDS (`$FE`) | `n8_fds`  | `map_fds.v`  | `/EDFC/MAPS/120.RBF`   |
 
 Numbering: RBF number = 100 + mapper (above 155: pick a free number).
+FDS has no iNES mapper; it is `MAPPER 20` (the number old iNES documents
+used for the disk system) and `MAPROUT.BIN` entry `$FE`, as the original
+menu does.
 `cores/cores.txt` is the table `tools/mk_maprout.py` turns into
 `/EDFC/MAPROUT.BIN`. The menu core `255.RBF` is built from
 `cores/nrom_noret` (same sources, `RET_MENU 0`, `MAPPER` default 0).
@@ -27,7 +31,11 @@ Sources:
 - `map_*.v`: one module per mapper, same port list as `map_nrom.v`
   (MMC1/MMC3 also take `mclk`, `rst`, `cpu_dat` for their registers; MMC5
   also `clk`, `ppu_rd`, `ppu_dat` and answers reads via `cpu_do/cpu_oe`,
-  `ppu_do/ppu_oe`, which `top.v` gates).
+  `ppu_do/ppu_oe`, which `top.v` gates). FDS (`map_fds.v`) answers its
+  registers and a code stub the same way, and is the only core that may
+  write PRG SRAM in game mode (`prg_wok`: its RAM and disk image live
+  there). How the disk reaches the CPU despite the SRAM taking A0-A9 from
+  the console bus: see the comment at the top of `map_fds.v`.
 - `top.v`: board glue; a `generate` block instantiates only the mapper of
   this build. The core never drives the CPU data bus.
 - `n8_nrom.sdc`: timing constraints, shared by all revisions.

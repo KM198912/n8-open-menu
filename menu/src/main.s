@@ -86,6 +86,10 @@ rc_att:     .res 1          ; load attempt (0 or 1)
 rc_order:   .res 1          ; 0 = nCONFIG first, 1 = CMD18 first
 rc_sv:      .res 2          ; bytes saved by the $5000 probe
 rc_cd0:     .res 1          ; CONF_DONE right after nCONFIG
+is_fds:     .res 1          ; 1 = the game is an FDS image (RAM code uploads tables)
+cpld_or:    .res 1          ; CPLD $09 bits set at game start ($10, FDS $14)
+fds_off:    .res 1          ; FDS: 16 = fwNES header, 0 = none
+fds_sides:  .res 1
 win0:       .res 1          ; PRG window readback ($8000 / $C000 of the game)
 win1:       .res 1
 gm:         .res 4          ; game mode reads: $8000, $C000, $FFFC, $FFFD
@@ -99,6 +103,8 @@ joy_prev:   .res 1
 joy_new:    .res 1
 rep:        .res 1
 depth:      .res 1
+old_sel:    .res 1          ; cursor / first visible row before a move
+old_top:    .res 1
 err:        .res 1
 width:      .res 1
 
@@ -167,6 +173,15 @@ pt_poff:    .res 1
 pt_plen:    .res 1
 pt_pbase:   .res 1
 pt_len:     .res 1
+fds_size:   .res 4          ; fds.s: size of the .fds file
+fp_t:       .res 4          ; fds.s: side count / table building
+fp_n:       .res 1
+fp_p:       .res 2
+fp_q:       .res 2
+fp_e:       .res 1
+fp_have:    .res 1
+fp_size:    .res 2
+fp_len:     .res 2
 
 .segment "CHARS"
     .incbin "font.chr"
@@ -314,6 +329,8 @@ main_loop:
     lda joy_new
 @move:
     tax
+    jsr keep_pos
+    txa
     and #BTN_UP
     beq @down
     jsr cur_up
@@ -324,21 +341,23 @@ main_loop:
     beq @buttons
     jsr cur_down
 @moved:
-    jsr redraw
+    jsr update_list
     jmp main_loop
 
 @buttons:
     lda joy_new
     and #BTN_LEFT
     beq @r
+    jsr keep_pos
     jsr page_up
-    jsr redraw
+    jsr update_list
     jmp main_loop
 @r: lda joy_new
     and #BTN_RIGHT
     beq @a
+    jsr keep_pos
     jsr page_down
-    jsr redraw
+    jsr update_list
     jmp main_loop
 @a: lda joy_new
     and #BTN_A | BTN_START
@@ -530,6 +549,79 @@ open_dir:
     rts
 
 ; ---------------------------------------------------------------- drawing
+; Cursor moves and page changes keep the picture on (a black frame per
+; step was visible as flicker): within the page only the '>' moves, in
+; vblank; when the page scrolls, the rows are redrawn a few per vblank.
+keep_pos:
+    lda sel
+    sta old_sel
+    lda top
+    sta old_top
+    rts
+
+update_list:
+    lda sel
+    cmp old_sel
+    beq @same
+    lda top
+    cmp old_top
+    bne draw_list_live
+    ; '>' off the old row, onto the new one: 2 bytes, in vblank
+    jsr vwait
+    lda old_sel
+    sec
+    sbc top
+    clc
+    adc #LIST_ROW
+    ldx #1
+    jsr gotoxy
+    lda #' '
+    sta PPUDATA
+    lda sel
+    sec
+    sbc top
+    clc
+    adc #LIST_ROW
+    ldx #1
+    jsr gotoxy
+    lda #'>'
+    sta PPUDATA
+    jmp fix_scroll
+@same:
+    rts
+
+; draw_list_live: all list rows with rendering on, LIVE_ROWS per vblank
+; (a row is ~800 cycles; NTSC/Dendy vblank 2273 cycles: 2 rows; PAL 7459:
+; 6 rows)
+draw_list_live:
+    lda #0
+    sta tmp+3
+@frame:
+    jsr vwait
+    ldx #2
+    lda console
+    cmp #RG_PAL
+    bne @n
+    ldx #6
+@n: stx tmp+2
+@r: jsr draw_row
+    inc tmp+3
+    lda tmp+3
+    cmp #VIS
+    beq fix_scroll
+    dec tmp+2
+    bne @r
+    jsr fix_scroll
+    jmp @frame
+
+; after PPUADDR writes with rendering on: scroll back to 0,0
+fix_scroll:
+    lda #0
+    sta PPUSCROLL
+    sta PPUSCROLL
+    sta PPUCTRL
+    rts
+
 ; full redraw with rendering off, then show
 redraw:
     jsr vwait
@@ -554,6 +646,15 @@ draw_list:
     lda #0
     sta tmp+3               ; visible row index
 @row:
+    jsr draw_row
+    inc tmp+3
+    lda tmp+3
+    cmp #VIS
+    bne @row
+    rts
+
+; draw_row: list row tmp+3 (cursor, name, '/' for folders, padding)
+draw_row:
     lda tmp+3
     clc
     adc #LIST_ROW
@@ -604,10 +705,6 @@ draw_list:
     inc width
     bne @blank
 @next:
-    inc tmp+3
-    lda tmp+3
-    cmp #VIS
-    bne @row
     rts
 
 draw_status:
@@ -651,6 +748,12 @@ draw_status:
     lda err
     cmp #$43
     bne @pad
+    lda mapper
+    cmp #$FE                ; FDS image: MAPROUT.BIN entry $FE
+    bne @dec
+    PRINT "  FDS"
+    jmp @pad
+@dec:
     lda mapper              ; decimal, right-aligned in 5 like the info screen
     ldx #0                  ; (iNES mapper numbers are decimal everywhere)
     jsr putdec
@@ -664,9 +767,11 @@ draw_status:
     rts
 
 err_codes:
-    .byte $01,$03,$10,$11,$20,$21,$23,$24,$40,$41,$42,$43,$44,$45,$46,$47,0
+    .byte $01,$03,$10,$11,$20,$21,$23,$24,$40,$41,$42,$43,$44,$45,$46,$47
+    .byte $48,$4A,$4B,$50,$51,$52,$53,0
 err_text:
     .word t01,t03,t10,t11,t20,t21,t23,t24,t40,t41,t42,t43,t44,t45,t46,t47
+    .word t48,t4A,t4B,t50,t51,t52,t53
 t01: .byte "SD NO ANSWER",0
 t03: .byte "SD INIT TIMEOUT",0
 t10: .byte "SD READ REJECTED",0
@@ -683,6 +788,13 @@ t44: .byte "NO EDFC/MAPROUT.BIN",0
 t45: .byte "CORE RBF MISSING",0
 t46: .byte "RBF FRAGMENTED",0
 t47: .byte "RAM CODE TOO BIG",0
+t48: .byte "SAVE STILL PENDING",0
+t4A: .byte "SAVE: OTHER CARD",0
+t4B: .byte "SAVE FILE CHANGED",0
+t50: .byte "NO EDFC/DISKSYS.ROM",0
+t51: .byte "UNKNOWN FDS BIOS",0
+t52: .byte "NOT AN FDS IMAGE",0
+t53: .byte "FDS: MAX 4 SIDES",0
 
 ; rec = LIST record shown at list position A (through the sorted order)
 rec_of:
@@ -965,6 +1077,7 @@ nmi:
 .include "fat32.s"
 .include "fatw.s"
 .include "loader.s"
+.include "fds.s"
 .include "save.s"
 .include "region.s"
 .include "ramload.s"

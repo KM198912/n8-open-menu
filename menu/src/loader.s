@@ -5,6 +5,7 @@
 ;              $44 /EDFC/MAPROUT.BIN missing   $45 core (RBF) missing
 ;              $46 core file too fragmented   $47 RAM code too large
 ;              $48/$49 battery save (save.s)
+;              $50-$54 FDS (fds.s)
 
 MAX_EXT = 16
 
@@ -119,8 +120,18 @@ lookup_core:
 launch:
     jsr read_header
     bcc @hdr_ok
+    cmp #$40                ; not iNES: an FDS disk image?
+    bne @err
+    jsr fds_detect
+    bcs @err
+    jmp launch_fds
+@err:
     rts
 @hdr_ok:
+    lda #0
+    sta is_fds
+    lda #$10                ; CPLD $09 bit 4 for a normal game
+    sta cpld_or
     jsr pal_decide          ; NTSC game on a PAL console? (region.s)
     lda hdr+4               ; PRG 16 KB units: 1..32
     beq @badsize
@@ -158,30 +169,7 @@ launch:
     bcc @saved
     rts
 @saved:
-
-    ; --- /EDFC/MAPS/NNN.RBF
-    ldx #10
-@mp:
-    lda name_maps,x
-    sta fname,x
-    dex
-    bpl @mp
-    MOV32 it_clus, dir_edfc
-    jsr find_name
-    bcc @maps
-    lda #$45
-    sec
-    rts
-@maps:
-    MOV32 it_clus, f_clus
-    jsr core_fname
-    jsr find_name
-    bcc @rbf
-    lda #$45
-    sec
-    rts
-@rbf:
-    jsr build_extents
+    jsr find_core_rbf
     bcc @ext_ok
     rts
 @ext_ok:
@@ -311,8 +299,12 @@ launch:
     ora #$40                ; bit 6: NTSC game on PAL - cores correct IRQ timing
 @cfg:
     sta cfg_map
+    ; fall through
 
-    ; --- copy the RAM part and run it (never returns)
+; run_ramcode: copy the RAM part and run it (never returns; carry set,
+; A = $47 if it does not fit). Needs cfg_*, mapper, ext_tab, is_fds,
+; cpld_or.
+run_ramcode:
     lda #<__RAMCODE_SIZE__
     ldx #>__RAMCODE_SIZE__
     cpx #4                  ; RAMC in os.cfg: $0300-$06FF
@@ -341,6 +333,32 @@ launch:
     dex
     bne @rc
     jmp rc_entry
+
+; find_core_rbf: /EDFC/MAPS/NNN.RBF for core_num -> ext_tab (dir_edfc set
+; by lookup_core). Carry set on error (A = $45 missing, $46, SD error).
+find_core_rbf:
+    ldx #10
+@mp:
+    lda name_maps,x
+    sta fname,x
+    dex
+    bpl @mp
+    MOV32 it_clus, dir_edfc
+    jsr find_name
+    bcc @maps
+    lda #$45
+    sec
+    rts
+@maps:
+    MOV32 it_clus, f_clus
+    jsr core_fname
+    jsr find_name
+    bcc @rbf
+    lda #$45
+    sec
+    rts
+@rbf:
+    jmp build_extents
 
 ; rec = LIST record of list position `sel` (sorted order, see rec_of)
 sel_rec:

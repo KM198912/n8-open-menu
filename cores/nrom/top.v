@@ -31,7 +31,7 @@ module n8_top #(
     // bug in the loader); the menu core 255 (cores/nrom_noret) uses 0.
     parameter RET_MENU = 0,
     // iNES mapper of this build: 0 = NROM, 1 = MMC1, 2 = UxROM, 3 = CNROM,
-    // 4 = MMC3, 5 = MMC5, 7 = AxROM, 24/26 = VRC6a/b, 66 = GxROM
+    // 4 = MMC3, 5 = MMC5, 7 = AxROM, 20 = FDS, 24/26 = VRC6a/b, 66 = GxROM
     parameter MAPPER = 0
 ) (
     // CPU bus
@@ -101,7 +101,7 @@ module n8_top #(
         .ppu_addr(ppu_addr), .ppu_wr(ppu_wr),
         .bios_off(max2),
         .map_idx(map_idx), .prg_size(prg_size), .chr_size(chr_size),
-        .chr_is_ram(chr_is_ram), .map_cfg(map_cfg),
+        .chr_is_ram(chr_is_ram), .map_cfg(map_cfg), .aud_gain(aud_gain),
         .bus_quiet(bus_quiet), .m2_ok(m2_ok),
         .prg_a(os_prg_a), .prg_rom(os_prg_rom), .prg_ram(os_prg_ram), .prg_wr(os_prg_wr),
         .chr_a(os_chr_a), .chr_sel(os_chr_sel), .chr_wr(os_chr_wr),
@@ -117,6 +117,9 @@ module n8_top #(
     wire        gm_chr_sel, gm_chr_wr, gm_ciram_a10, gm_ciram_sel, gm_irq;
     wire [7:0]  gm_cpu_do, gm_ppu_do;    // data a mapper answers reads with ...
     wire        gm_cpu_oe, gm_ppu_oe;    // ... and when (claims, gated below)
+    wire        gm_aud, gm_aud_en;       // expansion audio on cpu_exp (VRC6)
+    wire        gm_prg_wok;              // game may write PRG SRAM (FDS RAM)
+    wire [7:0]  aud_gain;                // $89
 
     // Only the mapper selected by MAPPER is built. Any game index in reg $83
     // (not $FF) runs it; MAPROUT.BIN decides which core a ROM gets.
@@ -134,6 +137,8 @@ module n8_top #(
             );
             assign gm_cpu_oe = 1'b0;  assign gm_cpu_do = 8'h00;
             assign gm_ppu_oe = 1'b0;  assign gm_ppu_do = 8'h00;
+            assign gm_aud = 1'b0;     assign gm_aud_en = 1'b0;
+            assign gm_prg_wok = 1'b0;
         end else if (MAPPER == 4) begin : g_mmc3
             // MMC3 (scanline IRQ on PPU A12; held in power-on state in menu mode)
             map_mmc3 mmc3 (
@@ -147,6 +152,8 @@ module n8_top #(
             );
             assign gm_cpu_oe = 1'b0;  assign gm_cpu_do = 8'h00;
             assign gm_ppu_oe = 1'b0;  assign gm_ppu_do = 8'h00;
+            assign gm_aud = 1'b0;     assign gm_aud_en = 1'b0;
+            assign gm_prg_wok = 1'b0;
         end else if (MAPPER == 5) begin : g_mmc5
             // MMC5 (answers CPU and PPU reads; held in power-on state in menu mode)
             map_mmc5 mmc5 (
@@ -159,6 +166,8 @@ module n8_top #(
                 .ciram_a10(gm_ciram_a10), .ciram_sel(gm_ciram_sel), .irq(gm_irq),
                 .cpu_do(gm_cpu_do), .cpu_oe(gm_cpu_oe), .ppu_do(gm_ppu_do), .ppu_oe(gm_ppu_oe)
             );
+            assign gm_aud = 1'b0;     assign gm_aud_en = 1'b0;
+            assign gm_prg_wok = 1'b0;
         end else if (MAPPER == 2 || MAPPER == 3 || MAPPER == 7 || MAPPER == 66) begin : g_simple
             // simple discrete mappers (map_simple.v)
             map_simple #(.MAPPER(MAPPER)) simple (
@@ -172,6 +181,8 @@ module n8_top #(
             );
             assign gm_cpu_oe = 1'b0;  assign gm_cpu_do = 8'h00;
             assign gm_ppu_oe = 1'b0;  assign gm_ppu_do = 8'h00;
+            assign gm_aud = 1'b0;     assign gm_aud_en = 1'b0;
+            assign gm_prg_wok = 1'b0;
         end else if (MAPPER == 24 || MAPPER == 26) begin : g_vrc6
             // Konami VRC6 (26: A0/A1 swapped); held in power-on state in menu mode
             map_vrc6 #(.MAPPER(MAPPER)) vrc6 (
@@ -182,10 +193,29 @@ module n8_top #(
                 .chr_is_ram(chr_is_ram),
                 .prg_a(gm_prg_a), .prg_rom(gm_prg_rom), .prg_ram(gm_prg_ram), .prg_wr(gm_prg_wr),
                 .chr_a(gm_chr_a), .chr_sel(gm_chr_sel), .chr_wr(gm_chr_wr),
-                .ciram_a10(gm_ciram_a10), .ciram_sel(gm_ciram_sel), .irq(gm_irq)
+                .ciram_a10(gm_ciram_a10), .ciram_sel(gm_ciram_sel), .irq(gm_irq),
+                .aud_gain(aud_gain), .aud(gm_aud)
             );
             assign gm_cpu_oe = 1'b0;  assign gm_cpu_do = 8'h00;
             assign gm_ppu_oe = 1'b0;  assign gm_ppu_do = 8'h00;
+            assign gm_aud_en = 1'b1;
+            assign gm_prg_wok = 1'b0;
+        end else if (MAPPER == 20) begin : g_fds
+            // Famicom Disk System RAM adapter (map_fds.v); the menu loads the
+            // BIOS, the disk sides and the block table
+            map_fds fds (
+                .mclk(mclk), .m2(cpu_m2), .clk(clk), .ppu_rd(ppu_rd), .map_cfg(map_cfg),
+                .rst(os_mode), .cpu_dat(cpu_dat),
+                .cpu_addr(cpu_addr), .cpu_ce(cpu_ce), .cpu_rw(cpu_rw),
+                .ppu_addr(ppu_addr), .ppu_wr(ppu_wr),
+                .prg_a(gm_prg_a), .prg_rom(gm_prg_rom), .prg_ram(gm_prg_ram), .prg_wr(gm_prg_wr),
+                .chr_a(gm_chr_a), .chr_sel(gm_chr_sel), .chr_wr(gm_chr_wr),
+                .ciram_a10(gm_ciram_a10), .ciram_sel(gm_ciram_sel), .irq(gm_irq),
+                .cpu_do(gm_cpu_do), .cpu_oe(gm_cpu_oe)
+            );
+            assign gm_ppu_oe = 1'b0;  assign gm_ppu_do = 8'h00;
+            assign gm_aud = 1'b0;     assign gm_aud_en = 1'b0;
+            assign gm_prg_wok = 1'b1;
         end else begin : g_nrom
             // NROM (MAPPER 0, also the default for the menu/dump builds)
             map_nrom nrom (
@@ -199,6 +229,8 @@ module n8_top #(
             );
             assign gm_cpu_oe = 1'b0;  assign gm_cpu_do = 8'h00;
             assign gm_ppu_oe = 1'b0;  assign gm_ppu_do = 8'h00;
+            assign gm_aud = 1'b0;     assign gm_aud_en = 1'b0;
+            assign gm_prg_wok = 1'b0;
         end
     endgenerate
 
@@ -246,7 +278,9 @@ module n8_top #(
     wire cpu_drive = ~os_mode & gm_cpu_oe & cpu_rw & mem_ok;
     assign prg_oe = ~cpu_rw | cpu_drive;     // outputs only on CPU reads
     assign ram_oe = ~cpu_rw | cpu_drive;
-    assign prg_we = os_mode ? ~prg_wr : 1'b1;  // games can never write PRG RAM
+    // games never write PRG RAM - except FDS, whose RAM lives there (its core
+    // only raises prg_wr for the RAM and its disk write window)
+    assign prg_we = os_mode ? ~prg_wr : ~(prg_wr & gm_prg_wok);
     assign ram_we = ~prg_wr;
 
     assign chr_ce = bus_quiet ? 1'b1 : ~chr_sel;
@@ -268,7 +302,7 @@ module n8_top #(
     assign cpu_dat = cpu_drive ? gm_cpu_do : 8'hzz;
     assign ppu_dat = ppu_drive ? gm_ppu_do : 8'hzz;
     assign cpu_irq = irq ? 1'b0 : 1'bz;      // open drain
-    assign cpu_exp = 1'bz;
+    assign cpu_exp = (~os_mode & gm_aud_en) ? gm_aud : 1'bz;   // expansion audio
 
     // MAX II bus mode: 11 = menu (CPLD registers unlocked), 01 = game (locked)
     assign max0 = 1'b1;

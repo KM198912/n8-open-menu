@@ -12,6 +12,7 @@
 //   $86  mapper config bits
 //   $87  Game Genie: not implemented, writes are ignored
 //   $88  bit 0: reset timeout long/short
+//   $89  audio gain for cores with expansion audio (128 = 1.0)
 // The menu's own PRG ($8000-$FFFF) sits in the save SRAM at $18000-$1FFFF
 // while the MAX II reports "BIOS off".
 //
@@ -38,6 +39,7 @@ module n8_osmap #(
     output reg [5:0] chr_size,
     output reg       chr_is_ram,
     output reg [6:0] map_cfg,
+    output reg [7:0] aud_gain,
     output           bus_quiet,
     output           m2_ok,
 
@@ -58,6 +60,7 @@ module n8_osmap #(
     initial chr_size   = 6'd0;
     initial chr_is_ram = 1'b0;
     initial map_cfg    = 7'd0;
+    initial aud_gain   = 8'd128;
 
     // ------------------------------------------------------------------
     // Address decoding (cpu_ce high = CPU $0000-$7FFF)
@@ -120,6 +123,7 @@ module n8_osmap #(
                        end
                 8'h86: map_cfg   <= cpu_dat[6:0];
                 8'h88: long_reset <= cpu_dat[0];
+                8'h89: aud_gain  <= cpu_dat;
                 default: ;                       // $87 (Game Genie) and others ignored
             endcase
         end

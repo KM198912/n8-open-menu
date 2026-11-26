@@ -2,6 +2,18 @@
 
 ## Open
 
+- **Menu: last game / quick start** (like Krikzz's menu; decided 2026-11-26,
+  after FDS): Select on a file opens a popup `ROM INFO` / `SELECT ONLY` /
+  `SELECT + LOAD` (Up/Down, A confirms, B closes); B stays "back", A stays
+  "open". Start loads the stored game from anywhere. Stored in save SRAM
+  page 10 (NOT usable: the BIOS rewrites pages 9-15 at power-on - needs
+  another place, e.g. a file on the SD card): `"N8LG"`, volume ID, directory cluster, file
+  cluster + size, long name; checked before loading (same card, name still
+  in that directory with that cluster/size, else "LAST GAME NOT FOUND"),
+  then the folder is opened with the cursor on it and it starts through
+  the normal path (.nes/.fds, saves, PAL). Status line: `START: <name>`.
+  New `menu/src/lastgame.s`; simulator: store -> power cycle (`--sram`) ->
+  Start, plus the missing-file error.
 - **Reset button = restart the game** (accepted as the initial behaviour,
   2026-11-25; power cycle = back to the menu). With the CRC-fixed loader and a
   core with `RET_MENU 1`, reset restarts the game cleanly, also when held for
@@ -27,20 +39,36 @@
 - `hello.nes`: some letters red although the attribute table is now cleared
   (check whether the fixed ROM was on the card).
 - Not implemented yet: Game Genie, save states, trainers, more
-  mappers (next: VRC6).
+  mappers.
 - MMC5 phase 3-4: vertical split (Uchuu Keibitai SDF, Bandit Kings ending),
   audio on `cpu_exp`, saves > 8 KB (Koei: 32 KB). Open detail: the
   background prefetch of line 0 happens before "in frame" is set, so its two
   tiles get neither the 8x16 set B nor extended attributes (not seen yet).
-- **VRC6 audio** (phase 2): banking + IRQ are done, see below.
-  Audio level: per-chip default calibrated to the 2A03 ratio + a per-chip
-  gain in the menu (Krikzz's "audio balance" is per chip, 0-200%; VRC6 needs
-  ~160-200% there on stock/AV-modded Famicoms, r/everdrive 15c8w2v).
-  The user's setup plays expansion audio (heard with VRC6 on the old firmware).
-- **FDS** (own project): RAM adapter ($4020-$4033, timer IRQ, disk byte
-  stream with the BIOS's timing), `.fds` sides in SRAM, writes back to SD,
-  auto side swap (watch which side the BIOS asks for), FDS audio. BIOS from
-  the user's own RAM adapter (`/EDFC/DISKSYS.ROM`), never shipped.
+- **Expansion audio level**: `AUD_GAIN_DEFAULT` (128 = 1.0) is not
+  calibrated yet. Needs a recording of `menu/tests/vrc6_tone.nes` on an
+  original N8 (VRC6 vs 2A03 pulse per pitch), then a per-chip default + a
+  per-chip gain in the menu (Krikzz's "audio balance" is per chip, 0-200%;
+  VRC6 needs ~160-200% there on stock/AV-modded Famicoms, r/everdrive 15c8w2v).
+- **FDS** (phase 1 = core done in simulation, see Done; BIOS = the user's
+  own dump `/EDFC/DISKSYS.ROM`, CRC32 `5E607DCF`, never shipped; the
+  original firmware carries Nintendo's BIOS inside `254.RBF`/`OS.BIN`):
+  - phase 2, menu: done in simulation (see Done); first hardware test:
+    Zelda II. If it misbehaves, suspect CPLD `$09` bit 2 first (set as
+    the clone menu does for FDS, meaning unknown). Manual side swap: done
+    in simulation (see Done); then the automatic one (phase 4).
+  - phase 3, saves: done, Zelda II's save survives power cycles on hardware.
+    Only side A is kept: games that save to another side lose that save at
+    power-off. Possible later: keep the side the game last wrote to (copy
+    it into the save SRAM on the swap), or let the user pick the side.
+  - **phase 4, auto swap - needed before a release**, not a convenience:
+    players won't read a README, sit at "CHANGE SIDE B" for 20 s and think
+    the core is broken. The original firmware, at Zelda II's "CHANGE SIDE
+    B" screen (after creating a player), waits 4-5 s and goes on by
+    itself (seen 2026-11-26) - eject + insert of the side the game asks
+    for (block 1 side/disk numbers vs. what the BIOS checks).
+  - phase 5: FDS audio ($4040-$4097) on `cpu_exp`.
+  - not supported: programs reading `$4031` themselves instead of through
+    the BIOS (own loaders, some copy protections) get `$00`.
 - Battery saves, open points: save sizes other than 8 KB (NES 2.0 header
   byte 10; SxROM 16/32 KB, MMC5) are not supported; names over 47 characters
   are cut (list keeps 51); deleted directory slots are not reused; the FAT
@@ -51,6 +79,92 @@
 
 ## Done
 
+- **Save records lost at power-off - battery saves too** (2026-11-26):
+  the BIOS loads OS.BIN into save SRAM pages 9-15 at every power-on (dump,
+  `$F080`), and the save record had lived in page 9 since the MMC5 work.
+  Both records (battery `"N8SV"`, FDS `"N8FD"`, the latter now with the
+  8.3 name) moved to `$0FFDC-$0FFFF`, the 36 bytes behind FDS side A. The
+  simulator now boots like the BIOS (OS.BIN into pages 9-15) and first
+  reproduced the loss; then both round trips pass: FDS (the `.fds` changes
+  by exactly the marker) and battery (`.sav` written, record cleared).
+  Hardware (2026-11-26): Zelda II's save survives a power cycle,
+  "SAVING..." shown. A battery `.nes` across a power cycle: not yet
+  re-tested on hardware since the move.
+- **FDS phase 3: saves to SD** (2026-11-26, simulation only): disk side A
+  lives in the battery-backed save SRAM at `$00000-$0FFFF`, sides B-D in PRG
+  SRAM. Only one side: the chip is 256 KB (LP62S2048) but only 128 KB are
+  reachable (hardware test: `$20000` lands on `$00000`, A17 not driven by
+  the FPGA; see `docs/hw-interface.md`). FDS save record `"N8FD"` in
+  page 9; at the next menu start ("SAVING...") every sector of side A
+  is compared with the save SRAM and only changed ones are written
+  back into the `.fds` (in place; volume ID, long name, cluster and size
+  checked first; header never touched). Simulator round trip: menu ->
+  Zelda II -> the game's save routine with a marker in its RAM -> power-on
+  run -> the `.fds` on the image differs in exactly the 17 marker bytes,
+  FAT clean (also with the simulator's `--sram-kb 128` board model). Also fixed: FDS error codes `$4A`/`$4B` clashed with the
+  battery-save ones -> now `$50-$54`; `$48`/`$4A`/`$4B` got texts.
+- **FDS: manual side swap** (2026-11-26, simulation only): the core reads
+  pad 1 along with the game (first 8 `$4016` reads after a strobe);
+  Select + Down held ~0.9 s ejects the disk for ~1 s, then the next side
+  goes in (wraps to A; side count from the menu via `$95`). Once per press.
+  `tb_fds` 87 checks + 5 mutations; with the real BIOS: a game-style change
+  loop (BIOS pad read + `$4032`) sees the swap and `LoadFiles` loads
+  Zelda II's GROUND-0 from side B byte-exact. Hardware (2026-11-26, PAL
+  console): Zelda II - menu -> BIOS -> side A, player created and saved
+  ("WAIT"), "CHANGE SIDE B" -> Select + Down -> side B loads, the game
+  starts in the palace with the status bar in place (timer PAL fix). First
+  attempt gave ERR.07: the card still had the menu without the side count
+  (`$95`), so the core swapped A -> A.
+- **FDS: Zelda II's save failed with ERR.24** (2026-11-26, found on
+  hardware, reproduced in the simulator by calling the game's save routine
+  `$8520`). Two core bugs in the write path: (1) the byte the BIOS writes
+  after the last data byte of a block (`$E729`, replaced by the CRC on a real
+  drive) was stored as data - block 2 grew to 3 bytes and the blocks after
+  it were dropped; now a third BIOS patch (`$E729 -> JSR $5708`) marks it
+  and the core skips it. (2) the transfer flag from write mode survived the
+  switch to read mode and fired the next read's IRQ at once; `$4025` with
+  bit 6 clear now clears it (the flag only exists while its condition
+  holds). Simulator: `WriteFile` returns 0 including the BIOS's read-back.
+  `tb_fds` with a 200-byte lead-in (15 s per run instead of ~1 min).
+- **No flicker when moving the cursor** (2026-11-26): every Up/Down used to
+  redraw the whole list with rendering off (one black frame per step). Now
+  only the `>` moves (in vblank); when the page scrolls, the rows are
+  redrawn with the picture on, 2 per vblank (NTSC/Dendy) or 6 (PAL).
+  Simulator: `--dark-after` counts frames with rendering off (0 while
+  navigating), and PPUDATA writes are only flagged outside vblank.
+- **FDS phase 2: menu** (2026-11-26, simulation only): `menu/src/fds.s`.
+  `.fds` detection (fwNES header or raw `*NINTENDO-HVC*`), up to 4 sides;
+  `/EDFC/DISKSYS.ROM` -> PRG `$08000`, checked and patched; sides ->
+  `$10000 + n x $10000`; block tables staged at `$0A000`, sent by the RAM
+  code once the core is up (`$91-$93`, then `$94` = side A); `$84 = $1F`,
+  CHR RAM, `$86` bit 6 on PAL, CPLD `$09 = $15`. Errors `$4A`-`$4D`; the
+  no-core line says `FDS`. Simulator end to end (`run.py` hands over to
+  the FDS model at `$83 = $FE`): RBF stream = file, tables = reference,
+  BIOS boots Zelda II from the menu-filled PRG SRAM; `hello.nes` still
+  starts; missing / altered BIOS -> `4A` / `4B`.
+- **FDS phase 1: core** (2026-11-26, simulation only, not built yet):
+  `cores/nrom/map_fds.v`, revision `n8_fds` -> `120.RBF` (`MAPROUT` `$FE`).
+  The SRAMs take A0-A9 from the console bus, so the core cannot fetch disk
+  bytes itself: the patched BIOS reads/writes them through 1 KB windows
+  (`$5800`/`$5C00`) via an 8-byte stub the core serves at `$5700`. Disk
+  in `.fds` form + block table (no gaps/CRCs in SRAM); timing 149 1/3
+  cycles per byte, lead-in 3537 / gaps 122 byte times; overrun -> CRC
+  error bit (ERR.27, never silent corruption); timer IRQ with the PAL
+  correction (Zelda II's split: NTSC line 31, PAL without fix 296, with
+  fix 30). `tb_fds.v` (+ mutations), `tools/n8sim/fds_boot.py`: the
+  user's BIOS boots Zelda II (license screen, side A, game code). Found by
+  the boot run, not the testbench: the BIOS's ~27-cycle reset pulse must
+  restart the head at once.
+- **VRC6 audio** (2026-11-26): `map_vrc6.v` two pulses (duty, M bit,
+  E = 0 resets the step) + sawtooth, `$9003` halt and >> 4 / >> 8; mix
+  0..61 x gain (`$89`, menu writes `AUD_GAIN_DEFAULT` = 128), first-order
+  sigma-delta DAC at 3.125 MHz (clk/16) with clamp, out on `cpu_exp` only
+  in game mode. `tb_vrc6.v` 77 checks, 11 mutations caught. Test ROM
+  `menu/tests/vrc6_tone.s` (8 parts: 2A03 vs VRC6 pulse at 440/110/55 Hz,
+  saw, silence). Hardware: on an original N8 the test ROM plays every part
+  and the menu runs; on our clone only part 1 (2A03) is audible, while
+  Akumajou Densetsu's VRC6 bass comes through - a limit of that clone's
+  board, not of the core.
 - **NTSC games on PAL consoles** (2026-11-25): menu `src/region.s`
   measures the console (15-cycle loop between vblank flags: NTSC ~1985,
   PAL ~2217, Dendy ~2364 passes) and the game's region (NES 2.0 byte 12,

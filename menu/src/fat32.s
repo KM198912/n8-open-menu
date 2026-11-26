@@ -722,6 +722,7 @@ stream_next_sector:
 ; stream_copy: copy copy_n (24 bit) bytes from the stream to the sink:
 ;   sink = 0: PRG RAM window at dst ($4800-$4FFF), page in prg_page (reg $80)
 ;   sink = 1: PPU data port (address set by the caller)
+;   sink = 2: save SRAM window at dst ($6000-$7FFF), page in prg_page (reg $81)
 stream_copy:
 @loop:
     lda copy_n
@@ -769,13 +770,20 @@ stream_copy:
     sta chunk+1
 @c2:
     lda sink
-    bne @c3
-    ; PRG sink: chunk = min(chunk, $5000 - dst)
+    cmp #1
+    beq @c3
+    ; window sinks: chunk = min(chunk, window end - dst)
+    ldx #$50                ; PRG: $5000
+    lda sink
+    beq @wend
+    ldx #$80                ; save SRAM: $8000
+@wend:
+    stx tmp+2
     sec
     lda #$00
     sbc dst
     sta tmp
-    lda #$50
+    lda tmp+2
     sbc dst+1
     sta tmp+1
     lda tmp+1
@@ -802,14 +810,15 @@ stream_copy:
     ; copy chunk bytes (chunk is 1..256; low byte 0 means 256)
     ldy #0
     lda sink
-    bne @ppu
+    cmp #1
+    beq @ppu
 @prg:
     lda (src),y
     sta (dst),y
     iny
     cpy chunk
     bne @prg
-    ; dst += chunk, next page at $5000
+    ; dst += chunk, next page at the window end
     clc
     lda dst
     adc chunk
@@ -817,12 +826,22 @@ stream_copy:
     lda dst+1
     adc chunk+1
     sta dst+1
-    cmp #$50
+    cmp tmp+2
     bne @adv
+    inc prg_page
+    lda sink
+    bne @spage
     lda #$48
     sta dst+1
-    inc prg_page
     lda #FPGA_PRG_PAGE
+    sta N8_IDX
+    lda prg_page
+    sta N8_DAT
+    jmp @adv
+@spage:
+    lda #$60
+    sta dst+1
+    lda #FPGA_SRAM_PAGE
     sta N8_IDX
     lda prg_page
     sta N8_DAT

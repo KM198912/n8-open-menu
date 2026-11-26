@@ -14,6 +14,15 @@ clone, **[likely]** consistent usage, **[guess]** needs a hardware test.
 - `0x0000-0x1FFF`: CHR, 8 KB (menu font, normal 2bpp tiles).
 - `0x2000-0x5FFF`: unused (v1.26 fills `0x2000-0x3FFF` with `0xAA`, the rest with `0x00`).
 - `0x6000-0xDFFF`: PRG, 32 KB, mapped to CPU `$8000-$FFFF`, vectors at `$FFFA`.
+- **Where the BIOS puts it** [confirmed in the BIOS dump, `$F080`, 2026-11-26]:
+  the whole file, 8 KB at a time through the `$6000` window, into **save
+  SRAM pages 9-15** (`$12000-$1FFFF`): CHR part in page 9, padding in pages
+  10-11, PRG in pages 12-15 (`$18000` = CPU `$8000`). Then (`$F0BC`) it
+  copies its own `$FC00-$FFFF` into page 15 at `$7C00` (over the menu's
+  last 1 KB, vectors included). So pages 9-11 are rewritten at every
+  power-on: nothing that must survive may live there (our save record did,
+  until 2026-11-26). The CHR part is not loaded into CHR RAM; our menu
+  uploads its font itself.
 - The clone bootloader starts a plain image. Tested 2026-11-24 with our own
   red-backdrop test (`tools/mk_testos.py`).
 - PRG is RAM while the menu runs: v1.26 rewrites its own vectors at `$FFFA-$FFFF`.
@@ -63,7 +72,7 @@ Decoded in `$4400-$45FF`, mirrored every 4 bytes (`addr[1:0]` = 0 index,
 | Reg | Name in sample | Bits | Function |
 |---|---|---|---|
 | `$80` | PRG_MAPA | 7:0 | 2 KB page of PRG RAM shown at **`$4800-$4FFF`** (read/write). This is how the menu loads game PRG. |
-| `$81` | SRM_MAPA | 5:0 | 8 KB page of the **save SRAM** shown at `$6000-$7FFF`. The menu uses `$08` for itself (SRAM offset 64 KB) and `$00-$03` for saves. |
+| `$81` | SRM_MAPA | 5:0 | 8 KB page of the **save SRAM** shown at `$6000-$7FFF`. The menu uses `$08` for itself (SRAM offset 64 KB) and `$00-$03` for saves. **Only 128 KB reachable** (2026-11-26): the chip is an EliteMT LP62S2048 (256 KB), but pages 16+ land on pages 0+ - its A17 is not driven by the FPGA (`prg_map[7]` and `prg_map[8]` both tested: markers in pages 0/16/32/48 all read back the last one); Krikzz's own menu map drives the pages the same way. |
 | `$82` | CHR_MAPA | 6:0 | 4 KB page of CHR RAM: PPU `$1000-$1FFF` = page n, `$0000-$0FFF` = page n-1. The menu loads CHR through `$2006/$2007`. |
 | `$83` | MAPPER | 7:0 | **active mapper index**; `$FF` = OS map. Writing a game mapper index switches the core into game mode (the start stub does this). |
 | `$84` | PRG_SIZE | 4:0 | PRG mask on A14-A18 (16 KB units) |

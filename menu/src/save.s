@@ -9,14 +9,22 @@
 ; Menu start (save_boot): page 0 -> .sav, then the record is cleared. A
 ; power loss in between leaves the record: the next start writes it again.
 ;
-; Record, save SRAM page 9 at $6000. Pages 0-7 are game PRG RAM (MMC5: up to
-; 64 KB), page 8 is the menu's file list, pages 12-15 hold the menu itself:
+; Record: 36 bytes at save SRAM $0FFDC-$0FFFF (page 7, REC). Of the 256 KB
+; chip only 128 KB are reachable; pages 0-7 are game PRG RAM (MMC5: up to
+; 64 KB, FDS: side A, which leaves exactly these 36 bytes free), page 8 is
+; the menu's file list, and pages 9-15 are rewritten from OS.BIN by the
+; BIOS at every power-on ($F080; the record used to be in page 9 and was
+; lost at power-off). An MMC5 game using all 64 KB would overwrite it.
 ;   $00 "N8SV" (written last)  $04 volume ID  $08 SAVE directory cluster
 ;   $0C .sav first cluster     $10 .sav 8.3 name (11 bytes)
 ;
 ; Save names: the ROM's name as the list shows it, ".nes" replaced by
 ; ".sav", at most 47 characters before ".sav" (the list and the directory
 ; search keep 51 characters), '?' (non-ASCII in the list) -> '_'.
+;
+; FDS games keep their disk sides in the save SRAM and have their own
+; record ("N8FD", see fds.s); save_pending sees both, save_flush passes an
+; FDS record on to fds_flush.
 ;
 ; Error codes: $48 a previous save is still pending (not written back)
 ;              $4A the card is not the one the save came from (volume ID)
@@ -25,7 +33,8 @@
 
 SAVE_SIZE = 8192
 SRAM_GAME = 0               ; save SRAM page of the game's PRG RAM
-SRAM_REC  = 9               ; save SRAM page of the record (was 4 before MMC5)
+SRAM_REC  = 7               ; save SRAM page of the record ...
+REC       = $7FDC           ; ... and its address in the $6000 window
 SRAM_MENU = 8               ; menu data (LIST)
 
 ; A = save SRAM page shown at $6000 (keeps Y; changes X)
@@ -35,16 +44,26 @@ sram_page:
     sta N8_DAT
     rts
 
-; carry set if a save record is pending
+; carry set if a save record is pending (battery "N8SV" or FDS "N8FD")
 save_pending:
     lda #SRAM_REC
     jsr sram_page
     ldy #3
-@l: lda $6000,y
+@l: lda REC,y
     cmp sv_magic,y
-    bne @no
+    bne @fds
     dey
     bpl @l
+    bmi @yes
+@fds:
+    ldy #3
+@l2:
+    lda REC,y
+    cmp fds_magic,y
+    bne @no
+    dey
+    bpl @l2
+@yes:
     lda #SRAM_MENU
     jsr sram_page
     sec
@@ -395,21 +414,21 @@ save_record:
     jsr sram_page
     ldy #3
 @f: lda vol_id,y
-    sta $6004,y
+    sta REC+4,y
     lda sv_dir,y
-    sta $6008,y
+    sta REC+8,y
     lda sv_clus,y
-    sta $600C,y
+    sta REC+$0C,y
     dey
     bpl @f
     ldy #10
 @n: lda fname,y
-    sta $6010,y
+    sta REC+$10,y
     dey
     bpl @n
     ldy #3
 @m: lda sv_magic,y
-    sta $6000,y
+    sta REC,y
     dey
     bpl @m
     lda #SRAM_MENU
@@ -483,10 +502,10 @@ save_discard:
     lda #SRAM_REC
     jsr sram_page
     lda #0
-    sta $6000
-    sta $6001
-    sta $6002
-    sta $6003
+    sta REC
+    sta REC+1
+    sta REC+2
+    sta REC+3
     lda #SRAM_MENU
     jsr sram_page
     clc
@@ -499,17 +518,24 @@ save_discard:
 save_flush:
     lda #SRAM_REC
     jsr sram_page
+    lda REC+2               ; "N8FD": an FDS game's disk sides
+    cmp #'F'
+    bne @battery
+    lda #SRAM_MENU
+    jsr sram_page
+    jmp fds_flush
+@battery:
     ldy #3
-@f: lda $6004,y
+@f: lda REC+4,y
     sta sv_last,y           ; (recorded volume ID)
-    lda $6008,y
+    lda REC+8,y
     sta sv_dir,y
-    lda $600C,y
+    lda REC+$0C,y
     sta sv_clus,y
     dey
     bpl @f
     ldy #10
-@n: lda $6010,y
+@n: lda REC+$10,y
     sta fname,y
     dey
     bpl @n

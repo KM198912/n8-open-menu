@@ -11,3 +11,4 @@
 24  124     # VRC6a (cores/nrom, revision n8_vrc6a)
 26  126     # VRC6b (cores/nrom, revision n8_vrc6b)
 66  166     # GxROM (cores/nrom, revision n8_gxrom)
+254 120     # FDS (cores/nrom, revision n8_fds; MAPROUT entry $FE = FDS)

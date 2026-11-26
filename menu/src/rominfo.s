@@ -1,5 +1,6 @@
 ; ROM info screen (Select on a file): iNES header details and whether our
-; MAPROUT.BIN has a core for the mapper.
+; MAPROUT.BIN has a core for the mapper; for FDS images the disk details,
+; the BIOS file and the FDS core.
 
 INFO_COL = 2
 
@@ -16,7 +17,9 @@ rom_info:
     PRINT "ROM INFO"
 
     jsr read_header         ; also sets rec for `sel`
-    bcc @hdr
+    bcs :+
+    jmp @hdr
+:
     sta tmp+3               ; error code (PRINT uses A/X)
     jsr info_name
     lda #6
@@ -24,9 +27,111 @@ rom_info:
     jsr gotoxy
     lda tmp+3
     cmp #$40
-    bne @ioerr
+    beq :+
+    jmp @ioerr
+:   jsr fds_detect          ; an FDS disk image? (fds.s)
+    bcc @fds
+    cmp #$52
+    bne @fds_max
+    PRINT "NOT AN FDS IMAGE"
+    jmp @wait
+@fds_max:
+    cmp #$53
+    bne @notines
+    PRINT "FDS: MAX 4 SIDES"
+    jmp @wait
+@notines:
     PRINT "NOT AN INES FILE"
     jmp @wait
+
+    ; --- FDS: block 1 is in the sector buffer (read_header read sector 0);
+    ; take game code and version before the lookups below reuse the buffer
+@fds:
+    ldx fds_off
+    lda SECBUF+$10,x
+    sta fp_t
+    lda SECBUF+$11,x
+    sta fp_t+1
+    lda SECBUF+$12,x
+    sta fp_t+2
+    lda SECBUF+$14,x
+    sta fp_t+3
+    PRINT "FORMAT   FDS DISK ("   ; row 6, positioned above
+    lda fds_off
+    beq @nohdr
+    PRINT "HEADER)"
+    jmp @sides
+@nohdr:
+    PRINT "NO HEADER)"
+@sides:
+    lda #7
+    ldx #INFO_COL
+    jsr gotoxy
+    PRINT "SIDES    "
+    lda fds_sides           ; 1-4
+    ora #'0'
+    sta PPUDATA
+    lda #8
+    ldx #INFO_COL
+    jsr gotoxy
+    PRINT "GAME     "
+    ldx #0
+@code:
+    lda fp_t,x              ; 3-letter game code, '?' if not printable
+    cmp #$20
+    bcc @q
+    cmp #$7F
+    bcc @c
+@q: lda #'?'
+@c: sta PPUDATA
+    inx
+    cpx #3
+    bne @code
+    PRINT "  V"
+    lda fp_t+3
+    cmp #10
+    bcs @v3
+    ora #'0'
+    sta PPUDATA
+    jmp @region
+@v3:
+    ldx #0
+    jsr putdec3
+@region:
+    lda #9
+    ldx #INFO_COL
+    jsr gotoxy
+    PRINT "REGION   NTSC (JAPAN)"
+    lda #10
+    ldx #INFO_COL
+    jsr gotoxy
+    PRINT "BIOS     DISKSYS.ROM "
+    jsr find_edfc
+    bcs @nobios
+    ldx #10
+@bn:
+    lda name_disksys,x
+    sta fname,x
+    dex
+    bpl @bn
+    MOV32 it_clus, dir_edfc
+    jsr find_name
+    bcs @nobios
+    lda f_size              ; must be 8 KB
+    ora f_size+2
+    ora f_size+3
+    bne @nobios
+    lda f_size+1
+    cmp #$20
+    bne @nobios
+    PRINT "YES"
+    jmp @fdscore
+@nobios:
+    PRINT "NO"
+@fdscore:
+    lda #$FE                ; MAPROUT.BIN entry $FE = FDS
+    sta mapper
+    jmp @core
 @ioerr:
     PRINT "READ ERROR "
     lda tmp+3
@@ -139,6 +244,7 @@ rom_info:
 
 @support:
     jsr info_region         ; region line (region.s)
+@core:
     lda #14
     ldx #INFO_COL
     jsr gotoxy

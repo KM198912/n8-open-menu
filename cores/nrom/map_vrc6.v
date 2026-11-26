@@ -1,6 +1,5 @@
 // n8-open: Konami VRC6 (mappers 24 = VRC6a, 26 = VRC6b) for the EverDrive N8
-// clone. Phase 1: banking, mirroring, PRG RAM, IRQ. The sound channels
-// ($9000-$B002) are not implemented yet; writes there are ignored.
+// clone: banking, mirroring, PRG RAM, IRQ, and the three sound channels.
 //
 // Written from the public documentation (NESdev wiki: VRC6, VRC IRQ), not
 // from any existing HDL.
@@ -55,6 +54,28 @@
 // where in vblank it starts.
 // This deliberately departs from the real chip; without the bit the core
 // behaves exactly like a VRC6.
+//
+// Sound (NESdev wiki: VRC6 audio), one step per CPU cycle:
+//   $9000/$A000  pulse: bit 7 M (ignore duty), 6:4 duty D, 3:0 volume
+//   $9001/$A001  period low; $9002/$A002 bit 7 enable E, 3:0 period high
+//   $9003        bit 0 halt (oscillators freeze where they are), bit 1
+//                period >> 4, bit 2 period >> 8 (overrides bit 1)
+//   $B000        sawtooth rate (5:0); $B001/$B002 like the pulses
+// Pulse: a step every period + 1 cycles, a 16-step sequencer counting down
+// from 15; output = volume while step <= D (or M set). E = 0: silent, the
+// sequencer is reset to 15 (the wiki says "reset ... resumes from the
+// beginning"; 15, since it counts down).
+// Saw: every second divider step adds the rate to an 8-bit accumulator, 6
+// times; the 14th step clears it. Output = accumulator bits 7:3. E = 0:
+// accumulator (and, not documented, the step count) held at 0; the divider
+// keeps running, as documented.
+// Mix: 4 + 4 + 5 bits = 0..61, linear, inverted relative to the 2A03 (as
+// documented). Out on cpu_exp: x gain ($89, 128 = 1.0; at 1.0 the full
+// mix of 61 uses 976 of 1024, higher gains clamp) -> first-order
+// sigma-delta at 3.125 MHz (board clock / 16, about the rate the original
+// firmware's PWM uses on this pin; 50 MHz toggling gave no audible output
+// on hardware); the board/console filter smooths it.
+// Not documented, chosen: outputs hold their value while halted.
 
 module map_vrc6 #(
     parameter MAPPER = 24
@@ -82,7 +103,9 @@ module map_vrc6 #(
     output         chr_wr,
     output reg     ciram_a10,
     output         ciram_sel,
-    output         irq
+    output         irq,
+    input  [7:0]   aud_gain,     // $89: 128 = 1.0
+    output         aud           // sigma-delta audio, inverted (cpu_exp)
 );
 
     reg [3:0] prg16 = 4'd0;
@@ -96,6 +119,19 @@ module map_vrc6 #(
     reg signed [11:0] presc = 12'sd1705;     // 341 x 5
     reg       irq_a = 1'b0, irq_e = 1'b0, irq_m = 1'b0;
     reg       irq_p = 1'b0;                  // pending
+
+    // sound
+    reg        p1_m = 1'b0, p2_m = 1'b0, p1_e = 1'b0, p2_e = 1'b0, s_e = 1'b0;
+    reg [2:0]  p1_d = 3'd0, p2_d = 3'd0;
+    reg [3:0]  p1_v = 4'd0, p2_v = 4'd0;
+    reg [11:0] p1_per = 12'd0, p2_per = 12'd0, s_per = 12'd0;
+    reg [11:0] p1_div = 12'd0, p2_div = 12'd0, s_div = 12'd0;
+    reg [3:0]  p1_step = 4'd15, p2_step = 4'd15;
+    reg [5:0]  s_rate = 6'd0;
+    reg [7:0]  s_acc = 8'd0;
+    reg [3:0]  s_cnt = 4'd0;
+    reg        f_halt = 1'b0, f16 = 1'b0, f256 = 1'b0;
+    reg [5:0]  mix = 6'd0;                   // 0..61
 
     wire rom_area = ~cpu_ce;                                // $8000-$FFFF
     wire ram_area =  cpu_ce & (cpu_addr[14:13] == 2'b11);   // $6000-$7FFF
@@ -148,7 +184,53 @@ module map_vrc6 #(
             irq_latch <= 8'd0;  irq_cnt <= 8'd0;  presc <= 12'sd1705;
             vbl <= 13'd0;       ren_m <= 2'b00;
             irq_a <= 1'b0;  irq_e <= 1'b0;  irq_m <= 1'b0;  irq_p <= 1'b0;
+            p1_e <= 1'b0;   p2_e <= 1'b0;   s_e <= 1'b0;    s_acc <= 8'd0;
+            p1_step <= 4'd15;  p2_step <= 4'd15;  s_cnt <= 4'd0;
+            f_halt <= 1'b0; f16 <= 1'b0;    f256 <= 1'b0;   mix <= 6'd0;
         end else begin
+            // ---- sound, one step per CPU cycle (frozen while halted)
+            if (!f_halt) begin
+                if (!p1_e) begin
+                    p1_step <= 4'd15;
+                    p1_div  <= eff(p1_per, f16, f256);
+                end else if (p1_div == 12'd0) begin
+                    p1_div  <= eff(p1_per, f16, f256);
+                    p1_step <= p1_step - 4'd1;
+                end else
+                    p1_div  <= p1_div - 12'd1;
+                if (!p2_e) begin
+                    p2_step <= 4'd15;
+                    p2_div  <= eff(p2_per, f16, f256);
+                end else if (p2_div == 12'd0) begin
+                    p2_div  <= eff(p2_per, f16, f256);
+                    p2_step <= p2_step - 4'd1;
+                end else
+                    p2_div  <= p2_div - 12'd1;
+                if (s_div == 12'd0) begin                // saw divider always runs
+                    s_div <= eff(s_per, f16, f256);
+                    if (!s_e) begin
+                        s_acc <= 8'd0;
+                        s_cnt <= 4'd0;
+                    end else if (s_cnt == 4'd13) begin   // 14th step: clear
+                        s_acc <= 8'd0;
+                        s_cnt <= 4'd0;
+                    end else begin
+                        if (s_cnt[0])                    // every second step
+                            s_acc <= s_acc + { 2'b00, s_rate };
+                        s_cnt <= s_cnt + 4'd1;
+                    end
+                end else begin
+                    s_div <= s_div - 12'd1;
+                    if (!s_e) begin
+                        s_acc <= 8'd0;
+                        s_cnt <= 4'd0;
+                    end
+                end
+                mix <= pulse_out(p1_e, p1_m, p1_d, p1_v, p1_step)
+                     + pulse_out(p2_e, p2_m, p2_d, p2_v, p2_step)
+                     + (s_e ? { 1'b0, s_acc[7:3] } : 6'd0);
+            end
+
             // ---- frame position (PAL correction)
             ren_m <= { ren_m[0], rendering };
             if (ren)
@@ -171,7 +253,24 @@ module map_vrc6 #(
             if (wr) begin
                 case (page)
                     3'd0: prg16 <= cpu_dat[3:0];                        // $8000
-                    3'd3: if (sub == 2'd3) b003 <= cpu_dat;             // $B003
+                    3'd1: case (sub)                                    // $9000 pulse 1
+                              2'd0: begin p1_m <= cpu_dat[7]; p1_d <= cpu_dat[6:4]; p1_v <= cpu_dat[3:0]; end
+                              2'd1: p1_per[7:0] <= cpu_dat;
+                              2'd2: begin p1_e <= cpu_dat[7]; p1_per[11:8] <= cpu_dat[3:0]; end
+                              default: begin f_halt <= cpu_dat[0]; f16 <= cpu_dat[1]; f256 <= cpu_dat[2]; end
+                          endcase
+                    3'd2: case (sub)                                    // $A000 pulse 2
+                              2'd0: begin p2_m <= cpu_dat[7]; p2_d <= cpu_dat[6:4]; p2_v <= cpu_dat[3:0]; end
+                              2'd1: p2_per[7:0] <= cpu_dat;
+                              2'd2: begin p2_e <= cpu_dat[7]; p2_per[11:8] <= cpu_dat[3:0]; end
+                              default: ;
+                          endcase
+                    3'd3: case (sub)                                    // $B000 saw / $B003
+                              2'd0: s_rate <= cpu_dat[5:0];
+                              2'd1: s_per[7:0] <= cpu_dat;
+                              2'd2: begin s_e <= cpu_dat[7]; s_per[11:8] <= cpu_dat[3:0]; end
+                              default: b003 <= cpu_dat;
+                          endcase
                     3'd4: prg8 <= cpu_dat[4:0];                         // $C000
                     3'd5: case (sub)                                    // $D000
                               2'd0: r0 <= cpu_dat;
@@ -202,7 +301,7 @@ module map_vrc6 #(
                                     end
                               default: ;
                           endcase
-                    default: ;                                          // audio (phase 2)
+                    default: ;
                 endcase
             end
         end
@@ -253,5 +352,38 @@ module map_vrc6 #(
     assign ciram_sel = ppu_addr[13];
 
     assign irq = irq_p;
+
+    // ---------------------------------------------------------------- sound helpers
+    // effective period ($9003: >> 8 overrides >> 4). The flags are passed as
+    // arguments: Quartus did not connect module registers read inside a
+    // function ("f16 assigned but never read").
+    function [11:0] eff(input [11:0] p, input sh4, input sh8);
+        eff = sh8 ? { 8'd0, p[11:8] } : sh4 ? { 4'd0, p[11:4] } : p;
+    endfunction
+    function [5:0] pulse_out(input e, input m, input [2:0] d, input [3:0] v, input [3:0] step);
+        pulse_out = (e && (m || step <= { 1'b0, d })) ? { 2'b00, v } : 6'd0;
+    endfunction
+
+    // ---------------------------------------------------------------- audio DAC
+    // mix changes at most once per CPU cycle (quasi-static for the board
+    // clock). level = mix x gain / 8, clamped to 1023 (gain 128: 61 -> 976),
+    // inverted, then a first-order sigma-delta modulator updated every 16
+    // board clocks: the share of 1s = (1023 - level) / 1024.
+    reg  [5:0]  mix_c = 6'd0;
+    reg  [13:0] lvl = 14'd0;
+    reg  [3:0]  sd_div = 4'd0;
+    reg  [10:0] sd = 11'd0;
+    reg         aud_r = 1'b1;
+    wire [9:0]  lvl10 = lvl[13] ? 10'd1023 : lvl[12:3];        // clamp
+    always @(posedge clk) begin
+        mix_c  <= mix;
+        lvl    <= mix_c * aud_gain;
+        sd_div <= sd_div + 4'd1;
+        if (sd_div == 4'd0) begin
+            sd    <= { 1'b0, sd[9:0] } + { 1'b0, 10'd1023 - lvl10 };
+            aud_r <= sd[10];
+        end
+    end
+    assign aud = aud_r;
 
 endmodule

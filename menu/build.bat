@@ -1,5 +1,5 @@
 @echo off
-rem Build the n8-open menu -> menu\build\OS.BIN (+ the hello.nes test ROM)
+rem Build the n8-open menu -> menu\build\OS.BIN (+ test ROMs hello.nes, vrc6_tone.nes)
 rem cc65: ca65/ld65 on PATH, or set CC65 to the cc65 bin folder
 cd /d "%~dp0"
 if "%CC65%"=="" (
@@ -16,7 +16,9 @@ if not exist font.chr python tools\mk_font.py || goto :fail
 "%LD65%" -C os.cfg -o build\OS.BIN -m build\OS.map -Ln build\OS.lbl build\main.o || goto :fail
 "%CA65%" -o build\hello.o tests\hello.s || goto :fail
 "%LD65%" -C tests\nrom.cfg -o build\hello.nes build\hello.o || goto :fail
-echo OK: build\OS.BIN build\hello.nes
+"%CA65%" -o build\vrc6.o tests\vrc6_tone.s || goto :fail
+"%LD65%" -C tests\vrc6.cfg -o build\vrc6_tone.nes build\vrc6.o || goto :fail
+echo OK: build\OS.BIN build\hello.nes build\vrc6_tone.nes
 exit /b 0
 :nocc65
 echo cc65 not found: put ca65/ld65 on PATH or set CC65=^<cc65 bin folder^>

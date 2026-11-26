@@ -4,8 +4,8 @@ Open firmware for the EverDrive N8 clone cartridge (NES, 72-pin): menu,
 loader and FPGA mapper cores, written from scratch.
 
 The cartridge: Altera Cyclone II EP2C5 (mapper cores), MAX II CPLD (bus
-glue, SD card, FPGA configuration), 512 KB PRG and CHR SRAM, 256 KB
-battery-backed save SRAM, the BIOS in flash. n8-open replaces what lives on
+glue, SD card, FPGA configuration), 512 KB PRG and CHR SRAM, battery-backed
+save SRAM (a 256 KB chip of which 128 KB are reachable), the BIOS in flash. n8-open replaces what lives on
 the SD card - `/EDFC/OS.BIN`, `/EDFC/MAPROUT.BIN` and `/EDFC/MAPS/*.RBF`;
 the cartridge's own BIOS stays as it is and starts it.
 
@@ -32,10 +32,17 @@ in `docs/hw-interface.md`.
 | MMC3 (4) | `104.RBF` |
 | MMC5 (5) | `105.RBF` - banking, ExRAM, fill mode, scanline IRQ, extended attributes; no split screen, no audio yet |
 | AxROM (7) | `107.RBF` |
-| VRC6 (24, 26) | `124.RBF`, `126.RBF` - banking, IRQ; no audio yet |
+| VRC6 (24, 26) | `124.RBF`, `126.RBF` - banking, IRQ, audio (2 pulses + saw on `cpu_exp`) |
 | GxROM (66) | `166.RBF` |
 
-Planned: VRC6 audio, MMC5 split and audio, FDS. Open items
+Expansion audio was tested on an original N8 (all of it plays) and one
+clone, whose board only passes part of it (low tones yes, higher tones no).
+Other clones may differ.
+
+Full list (the 151 mappers the original firmware supports, with our
+status per mapper): `docs/mappers.md`.
+
+Planned: MMC5 split and audio, FDS. Open items
 and test results: `BACKLOG.md`.
 
 ## NTSC games on PAL consoles

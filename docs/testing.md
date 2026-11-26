@@ -16,6 +16,7 @@ cores/tb/run.sh          (Icarus Verilog 12; on Windows through WSL:
 | `tb_mmc3.v` | MMC3 banking, PRG RAM protect, scanline IRQ with a PPU fetch model (A12 filter, latch 0, BG/sprite table layouts) |
 | `tb_mmc5.v` | MMC5 PRG/CHR/RAM, nametables, fill mode, ExRAM, scanline detection and IRQ from real PPU reads, 8x16 sets, extended attributes; monitors that the data buses are only driven when allowed |
 | `tb_simple.v` | discrete mappers (`-Ptb_simple.M=<mapper>`): UxROM |
+| `tb_fds.v` | FDS: memory map, registers, timer IRQ incl. the PAL correction (Zelda II's split line), BIOS stub, disk stream through the read window (lead-in, blocks, CRC, gaps, end of disk, the BIOS's short reset pulse), overrun -> CRC error bit, a write session with the block table update and the BIOS's flush byte; the lead-in is shortened to 200 byte times (`defparam`), ~15 s per run |
 
 The testbenches drive real bus cycles (M2 low/high, data hold after the
 falling edge) and, where it matters, a PPU model with per-dot fetches.
@@ -26,6 +27,32 @@ Each check set is validated with mutations: break one thing in the HDL
 (sed on a temporary copy), the testbench must fail. Long testbenches
 (MMC5: ~40 s per run) are best run in the background, one run per mutation.
 
+## FDS: BIOS boot (`tools/n8sim/fds_boot.py`)
+
+```
+python tools/n8sim/fds_boot.py <DISKSYS.ROM> <game.fds> [--frames N] [--side N]
+```
+
+Runs the user's own BIOS dump, patched as the menu patches it
+(`fdsdisk.py`: `.fds` sides, block tables, BIOS patch), on a Python model
+of `map_fds.v`, from the BIOS reset vector. Prints both nametables (BIOS
+font), the frame the game's code was first reached, the blocks read and
+written, and lost bytes. NTSC only; base cycle counts (slightly
+optimistic). Zelda II (2026-11-26): license screen, all 16 blocks of side
+A, game code from frame 743, no lost bytes; the BIOS needs 92-105 cycles
+per byte after taking it (+ ~20 to take it) of the 149 available.
+
+The menu side is covered too: when `run.py` sees a game start with mapper
+index `$FE`, it checks what the menu sent to the FDS core (table port,
+`$94`, CPLD `$09`), compares the tables entry by entry with
+`fdsdisk.block_table` of the sides in PRG SRAM, checks the BIOS patch,
+and then runs the BIOS on the FDS model with the PRG SRAM the menu
+filled (`--fds-frames N`, default 900). `--fds-call ADDR` then calls a
+game routine with NMI and timer off (`--fds-poke ADDR=HEX` first), e.g.
+Zelda II's save at `8520`; with `--sram FILE` a second run (the power-on)
+writes the save back into the `.fds` on the image. Card: `EDFC/DISKSYS.ROM`,
+`MAPROUT.BIN` with `254 120`, `MAPS/120.RBF`, the `.fds` file.
+
 ## Menu: simulator (`tools/n8sim`)
 
 ```
@@ -35,6 +62,7 @@ python tools/n8sim/run.py menu/build/OS.BIN --sd card.img [options]
 | Option | |
 |---|---|
 | `--frames N`, `--press KEYS@FRAME` | run time; buttons `A B s(elect) S(tart) U D L R` |
+| `--dark-after N` | count frames with rendering off from frame N (flicker check; PPUDATA writes with rendering on are flagged only outside vblank) |
 | `--our-boot-core` | the menu runs under our `255.RBF` (has the `$5000` window) |
 | `--expect-rbf FILE` | the configuration stream must equal this RBF |
 | `--abort-on-idle` | `$4402 = $03` during a stream aborts it (as on hardware) |

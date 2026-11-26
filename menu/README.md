@@ -10,7 +10,9 @@ from `docs/hw-interface.md`. The cartridge's BIOS (in its flash) loads it from
   then files alphabetically (case-insensitive), long file names.
   Up/Down (auto-repeat), Left/Right page, A/Start open, B back.
 - Select on a ROM: info screen (mapper, PRG/CHR sizes, mirroring, battery,
-  trainer, iNES/NES 2.0, whether a core exists).
+  trainer, iNES/NES 2.0, whether a core exists); for `.fds` images the
+  header, sides, game code/version, whether `DISKSYS.ROM` is there and the
+  FDS core.
 - Start a game: iNES header -> `/EDFC/MAPROUT.BIN` -> `/EDFC/MAPS/NNN.RBF`;
   PRG into PRG RAM, CHR via the PPU, then the core is streamed from SD into
   the FPGA by code running in CPU RAM (`src/ramload.s`), CPU RAM is cleared
@@ -22,8 +24,20 @@ from `docs/hw-interface.md`. The cartridge's BIOS (in its flash) loads it from
 - Battery saves: raw 8 KB `/EDFC/SAVE/<rom name>.sav` (the format emulators
   use), loaded at game start, written back at the next power-on
   ("SAVING..."). Details and safety checks: `src/save.s`.
+- FDS disk images (`.fds`, with or without the 16-byte header, up to 4
+  sides): need the user's own BIOS dump as `/EDFC/DISKSYS.ROM` (8 KB) and
+  the FDS core (`MAPROUT.BIN` entry `$FE`). The menu patches two
+  instructions of the BIOS (checked against the original bytes), copies
+  the sides and block tables for the core and starts the BIOS; side A is
+  inserted. Side swap: hold Select + Down for about a second (the disk is
+  ejected for a second, then the next side goes in). Saves: what the game
+  writes to side A goes back into the `.fds` file at the next menu start
+  ("SAVING...", a few seconds; only changed sectors are written). Writes to
+  other sides are lost at power-off (the battery RAM holds one side).
+  Details: `src/fds.s`, `cores/nrom/map_fds.v`.
 - Errors: `ERROR xx` on the status line; codes are listed at the top of
-  `src/sd.s`, `src/fat32.s`, `src/fatw.s`, `src/loader.s`, `src/save.s`.
+  `src/sd.s`, `src/fat32.s`, `src/fatw.s`, `src/loader.s`, `src/save.s`,
+  `src/fds.s`.
   If a core cannot be started, the screen turns one steady colour (see
   `src/ramload.s`); power-cycle to recover.
 
@@ -38,6 +52,7 @@ Not yet: Game Genie, save states, trainers, save sizes other than 8 KB.
 | `src/fat32.s` | mount, directories, long names, file streams |
 | `src/fatw.s` | FAT32 writing: allocation, entries, files, directories |
 | `src/loader.s` | iNES header, MAPROUT lookup, PRG/CHR loading |
+| `src/fds.s` | FDS images: detection, BIOS patch, sides, block tables |
 | `src/ramload.s` | code that runs from CPU RAM while the FPGA is reconfigured |
 | `src/save.s` | battery saves |
 | `src/rominfo.s` | the info screen |

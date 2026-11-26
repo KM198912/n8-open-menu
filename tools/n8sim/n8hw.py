@@ -31,6 +31,8 @@ class PPU:
         self.chr_read = None              # callbacks set by the board
         self.chr_write = None
         self.one_screen = True            # menu mode: CIRAM A10 = 0
+        self.now = 0                      # CPU cycle (set by the run loop)
+        self.vbl_end = 0                  # end of the current vblank (CPU cycle)
         self.warn = None                  # callback for programming errors
 
     def nt_index(self, a):
@@ -94,8 +96,8 @@ class PPU:
                 self.addr = (self.addr & 0xFF00) | v
             self.latch = not self.latch
         elif reg == 7:
-            if (self.mask & 0x18) and self.warn:
-                self.warn("PPUDATA write to $%04X while rendering is on" % self.addr)
+            if (self.mask & 0x18) and self.now > self.vbl_end and self.warn:
+                self.warn("PPUDATA write to $%04X while rendering is on, outside vblank" % self.addr)
             self.vram_write(self.addr, v)
             self.addr = (self.addr + (32 if self.ctrl & 4 else 1)) & 0x3FFF
 
@@ -109,6 +111,7 @@ class N8Board:
         self.prg = bytearray(512 * 1024)      # PRG SRAM
         self.chr = bytearray(512 * 1024)      # CHR SRAM
         self.sram = bytearray(256 * 1024)     # save SRAM (also holds the menu PRG)
+        self.sram_mask = 0x3FFFF              # 0x1FFFF: A17 not reaching the chip
         self.ppu = PPU()
         self.ppu.chr_read = self.chr_read
         self.ppu.chr_write = self.chr_write
@@ -136,14 +139,19 @@ class N8Board:
         self.sd = sdcard.SDCard(sd_image, sdhc=sdhc, reject_writes=reject_writes) if sd_image else None
         self.autoread_pipelined = True         # confirmed on hardware 2026-11-24 (offset 01)
         self.joy = 0                           # buttons for $4016 (A,B,Sel,Start,U,D,L,R)
+        self.fds_port = []                     # FDS core: ($91..$94 index, value) in order
         self.joy_shift = 0
 
-        # boot state as left by the BIOS: OS.BIN PRG at save SRAM $18000,
-        # CHR block loaded into the CHR pages the menu sees (ASSUMPTION: pages 0-1)
+        # boot state as left by the BIOS (dump, $F080): the whole OS.BIN, 7 x
+        # 8 KB, into save SRAM pages 9-15 ($12000-$1FFFF): CHR part in page 9,
+        # padding in 10-11, PRG in 12-15 ($18000 = CPU $8000). Whatever the
+        # menu kept in pages 9-11 is gone after every power-on. (The BIOS then
+        # copies its own $FC00-$FFFF over the menu's last 1 KB - not modelled;
+        # our menu ends below $C000 apart from the vectors.) CHR RAM is not
+        # loaded: the menu uploads its font itself.
         data = open(os_bin, "rb").read()
         assert len(data) == 0xE000, "OS.BIN must be 57344 bytes"
-        self.sram[0x18000:0x20000] = data[0x6000:0xE000]
-        self.chr[0:0x2000] = data[0:0x2000]
+        self.sram[0x12000:0x20000] = data
 
     def reset_osmap(self):
         self.index = 0
@@ -228,6 +236,8 @@ class N8Board:
                     self.bug("FPGA reg $%02X write while unconfigured" % idx)
                 return
             self.fpga_regs[idx] = v
+            if 0x91 <= idx <= 0x94:
+                self.fds_port.append((idx, v))
             if idx == 0x80:
                 self.prg_page = v
             elif idx == 0x81:
@@ -319,7 +329,7 @@ class N8Board:
         if 0x5000 <= a < 0x5800 and self.our_core:      # signature window (our cores only)
             return self.prg[0x7F800 | (a & 0x7FF)]
         if 0x6000 <= a < 0x8000:
-            return self.sram[((self.sram_page << 13) | (a & 0x1FFF)) & 0x3FFFF]
+            return self.sram[((self.sram_page << 13) | (a & 0x1FFF)) & self.sram_mask]
         if a >= 0x8000:
             if self.mem_mode & 3 == 1:
                 return self.sram[0x18000 + (a & 0x7FFF)]
@@ -369,7 +379,7 @@ class N8Board:
             if self.our_core:
                 self.prg[0x7F800 | (a & 0x7FF)] = v
         elif 0x6000 <= a < 0x8000:
-            self.sram[((self.sram_page << 13) | (a & 0x1FFF)) & 0x3FFFF] = v
+            self.sram[((self.sram_page << 13) | (a & 0x1FFF)) & self.sram_mask] = v
         elif a >= 0x8000:
             if self.mem_mode & 3 == 1:
                 self.sram[0x18000 + (a & 0x7FFF)] = v

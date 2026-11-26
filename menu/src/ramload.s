@@ -53,8 +53,8 @@ rc_entry:
     lda #CPLD_MEM           ; restore reg $09 (as the BIOS does): bit 4 set
     sta N8_IDX              ; before every game start, bit 3 (save states)
     lda rc_mem              ; clear, as Krikzz's menu does with save states
-    and #<~$08              ; off ($AF32-$AF57) -> $11 with the BIOS value $01
-    ora #$10
+    and #<~$08              ; off ($AF32-$AF57) -> $11 with the BIOS value $01;
+    ora cpld_or             ; FDS: bits 2 + 4 ($14), as the clone menu does
     sta N8_DAT
     ; the new core starts in menu mode: set the game registers
     lda #FPGA_PRG_SIZE
@@ -92,6 +92,52 @@ rc_entry:
     sta N8_IDX
     lda #$1A
     sta N8_DAT
+    lda #FPGA_AUD_GAIN      ; expansion audio level (VRC6 ...), 128 = 1.0
+    sta N8_IDX
+    lda #AUD_GAIN_DEFAULT
+    sta N8_DAT
+    ; FDS: the block tables staged at PRG $0A000 (fds.s) go to the core,
+    ; which only takes them in menu mode, i.e. now: 2 KB = 4 sides x 256
+    ; entries, the core's table address advances by itself. Side A in.
+    lda is_fds
+    beq @nofds
+    lda #FPGA_PRG_PAGE
+    sta N8_IDX
+    lda #FDS_TBL_PAGE
+    sta N8_DAT
+    lda #FPGA_FDS_TLO
+    sta N8_IDX
+    lda #0
+    sta N8_DAT
+    lda #FPGA_FDS_THI
+    sta N8_IDX
+    lda #0
+    sta N8_DAT
+    lda #FPGA_FDS_TDAT
+    sta N8_IDX
+    lda #$00
+    sta src
+    lda #$48
+    sta src+1
+    ldy #0
+@tbl:
+    lda (src),y
+    sta N8_DAT
+    iny
+    bne @tbl
+    inc src+1
+    lda src+1
+    cmp #$50
+    bne @tbl
+    lda #FPGA_FDS_NSIDES    ; for the side swap (Select + Down)
+    sta N8_IDX
+    lda fds_sides
+    sta N8_DAT
+    lda #FPGA_FDS_SIDE
+    sta N8_IDX
+    lda #$00                ; side 0, disk inserted
+    sta N8_DAT
+@nofds:
     ; clean CPU RAM for the game, as after power-on: zero page, the stack
     ; page, pages 2 and 7 = $00 (pages 3-6 hold this code). Menu leftovers
     ; changed games that read RAM before writing it (Castlevania: page 7 and

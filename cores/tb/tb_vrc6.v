@@ -136,6 +136,58 @@ module tb_vrc6;
     endtask
     integer ntsc_line;
 
+    // ---------------------------------------------------------------- audio helpers
+    // sample the mix (one value per CPU cycle) over n CPU cycles
+    integer hi_cnt, rises, maxv, zeros, ones;
+    reg prev_hi;
+    task mix_window(input integer n, input [5:0] level);
+        integer k; reg [5:0] v;
+        begin
+            hi_cnt = 0; rises = 0; maxv = 0; zeros = 0; prev_hi = 0;
+            for (k = 0; k < n; k = k + 1) begin
+                rd(16'h0000);
+                v = dut.g_vrc6.vrc6.mix;
+                if (v == level) hi_cnt = hi_cnt + 1;
+                if (v != 0 && !prev_hi) rises = rises + 1;
+                prev_hi = (v != 0);
+                if (v > maxv) maxv = v;
+            end
+        end
+    endtask
+    task saw_window(input integer n);
+        integer k; reg [7:0] v;
+        begin
+            maxv = 0; zeros = 0;
+            for (k = 0; k < n; k = k + 1) begin
+                rd(16'h0000);
+                v = dut.g_vrc6.vrc6.s_acc;
+                if (v > maxv) maxv = v;
+                if (v == 0) zeros = zeros + 1;
+            end
+        end
+    endtask
+    // share of 1s on cpu_exp over 16384 board clocks = 1024 modulator updates
+    // (the modulator runs at clk / 16); CPU cycles keep running meanwhile
+    integer edges;
+    task dac_ones;
+        integer k; reg pv;
+        begin
+            ones = 0; edges = 0; pv = cpu_exp;
+            fork
+                begin repeat (64) @(posedge clk); for (k = 0; k < 16384; k = k + 1) begin @(posedge clk); #1 if (cpu_exp === 1'b1) ones = ones + 1; if (cpu_exp !== pv) edges = edges + 1; pv = cpu_exp; end end
+                begin repeat (600) rd(16'h0000); end
+            join
+            ones = ones / 16;                  // in modulator updates (of 1024)
+        end
+    endtask
+    task set_gain(input [7:0] g);            // $89: menu mode only
+        begin
+            force dut.osmap.map_idx = 8'hFF; rd(16'h0000); release dut.osmap.map_idx;
+            reg_w(8'h89, g);
+            reg_w(8'h83, M);
+        end
+    endtask
+
     // CPU read cycles until /IRQ is low (max n); returns the count in cnt
     integer cnt;
     task until_irq(input integer n);
@@ -273,6 +325,115 @@ module tb_vrc6;
         vw(4'hF, 2'd1, 8'h00);
         force dut.osmap.map_idx = 8'hFF; rd(16'h0000); release dut.osmap.map_idx;
         reg_w(8'h86, 8'h00);
+        reg_w(8'h83, M);
+
+        // ---------------------------------------------------------------- audio: pulse
+        vw(4'h9, 2'd3, 8'h00);                 // $9003: no halt, no shift
+        vw(4'h9, 2'd0, 8'h7F);                 // D = 7 (8/16), volume 15
+        vw(4'h9, 2'd1, 8'h03);                 // period 3: a step every 4 cycles
+        vw(4'h9, 2'd2, 8'h80);                 // enable
+        mix_window(128, 6'd15);
+        check("pulse D=7: 64 of 128 cycles at volume 15", hi_cnt, 64);
+        check("pulse period 3: 16 steps x 4 = one period per 64 cycles", rises, 2);
+        vw(4'h9, 2'd0, 8'h0F);                 // D = 0 (1/16)
+        mix_window(128, 6'd15);
+        check("pulse D=0: 8 of 128 cycles", hi_cnt, 8);
+        vw(4'h9, 2'd0, 8'h8F);                 // M: ignore duty
+        mix_window(64, 6'd15);
+        check("pulse M: always the volume", hi_cnt, 64);
+        vw(4'h9, 2'd0, 8'h79);                 // D = 7, volume 9
+        mix_window(64, 6'd9);
+        check("pulse volume 9", hi_cnt, 32);
+        vw(4'h9, 2'd2, 8'h00);                 // disable: silent, sequencer -> 15
+        mix_window(32, 6'd0);
+        check("pulse E = 0: silent", hi_cnt, 32);
+        vw(4'h9, 2'd2, 8'h80);                 // restart: steps 15..8 silent first
+        begin : first
+            integer z; z = 0;
+            rd(16'h0000);
+            while (dut.g_vrc6.vrc6.mix == 0 && z < 100) begin rd(16'h0000); z = z + 1; end
+            check("pulse restarts at step 15: ~32 silent cycles first", (z >= 28 && z <= 33), 1);
+        end
+        vw(4'h9, 2'd1, 8'h30);                 // period $030 ...
+        vw(4'h9, 2'd3, 8'h02);                 // ... >> 4 = 3
+        repeat (64) rd(16'h0000);              // the divider takes a new period only
+                                               // when it reaches 0 (old one: 48)
+        mix_window(128, 6'd9);
+        check("$9003 bit 1: period >> 4", hi_cnt, 64);
+        vw(4'h9, 2'd2, 8'h83);                 // period $330 ...
+        vw(4'h9, 2'd3, 8'h04);                 // ... >> 8 = 3
+        repeat (64) rd(16'h0000);
+        mix_window(128, 6'd9);
+        check("$9003 bit 2: period >> 8", hi_cnt, 64);
+        vw(4'h9, 2'd3, 8'h01);                 // halt
+        mix_window(100, dut.g_vrc6.vrc6.mix);
+        check("$9003 halt: output frozen", hi_cnt, 100);
+        vw(4'h9, 2'd3, 8'h00);
+        vw(4'h9, 2'd2, 8'h00);
+
+        // ---------------------------------------------------------------- audio: second pulse, saw, mix
+        vw(4'hA, 2'd0, 8'h8C);                 // pulse 2: M, volume 12
+        vw(4'hA, 2'd1, 8'h00);
+        vw(4'hA, 2'd2, 8'h80);
+        mix_window(32, 6'd12);
+        check("pulse 2 (M, volume 12)", hi_cnt, 32);
+        vw(4'hA, 2'd2, 8'h00);
+        vw(4'hB, 2'd0, 8'h0A);                 // saw rate 10
+        vw(4'hB, 2'd1, 8'h00);                 // period 0: a step every cycle
+        vw(4'hB, 2'd2, 8'h80);
+        saw_window(28);
+        check("saw: 6 adds of 10 = 60 at the top", maxv, 60);
+        check("saw: cleared on the 14th step (2 zero samples per 14)", zeros, 4);
+        begin : sawper                         // cycles between two resets (60 -> 0)
+            integer k, last, dist; reg [7:0] v, pv;
+            last = -1; dist = -1; pv = 0;
+            for (k = 0; k < 60; k = k + 1) begin
+                rd(16'h0000);
+                v = dut.g_vrc6.vrc6.s_acc;
+                if (pv != 0 && v == 0) begin
+                    if (last >= 0 && dist < 0) dist = k - last;
+                    last = k;
+                end
+                pv = v;
+            end
+            check("saw period: 14 steps between resets", dist, 14);
+        end
+        mix_window(28, 6'd7);
+        check("saw output = accumulator >> 3 (60 -> 7)", maxv, 7);
+        vw(4'h9, 2'd0, 8'h8F); vw(4'h9, 2'd2, 8'h80);   // + pulse 1 M 15
+        vw(4'hA, 2'd0, 8'h8F); vw(4'hA, 2'd2, 8'h80);   // + pulse 2 M 15
+        mix_window(28, 6'd37);
+        check("mix: 15 + 15 + 7 = 37", maxv, 37);
+        vw(4'hB, 2'd2, 8'h00);
+        saw_window(14);
+        check("saw E = 0: accumulator held at 0", maxv, 0);
+        vw(4'hA, 2'd2, 8'h00);
+
+        // ---------------------------------------------------------------- audio: DAC
+        // pulse 1 alone, M, volume 15: mix 15
+        set_gain(8'd128);
+        vw(4'h9, 2'd0, 8'h8F); vw(4'h9, 2'd1, 8'h00); vw(4'h9, 2'd2, 8'h80);
+        dac_ones;
+        check("DAC gain 128: 1023 - 15*128/8 = 783 of 1024 ones (+-1)", (ones >= 782 && ones <= 784), 1);
+        set_gain(8'd255);
+        vw(4'h9, 2'd0, 8'h8F); vw(4'h9, 2'd1, 8'h00); vw(4'h9, 2'd2, 8'h80);
+        dac_ones;
+        check("DAC gain 255: 1023 - 15*255/8 = 545 ones (+-1)", (ones >= 544 && ones <= 546), 1);
+        check("DAC switches at most once per 16 clocks (3.125 MHz)", (edges <= 1025 && edges > 100), 1);
+        // clamp: 15 + 15 + saw 5 = 35 at gain 255 = 1115 -> 1023: no 1s
+        vw(4'hA, 2'd0, 8'h8F); vw(4'hA, 2'd1, 8'h00); vw(4'hA, 2'd2, 8'h80);
+        vw(4'hB, 2'd0, 8'd42); vw(4'hB, 2'd1, 8'hFF); vw(4'hB, 2'd2, 8'h8F);   // slow saw
+        while (dut.g_vrc6.vrc6.s_acc == 0) rd(16'h0000);                       // first add: 42
+        dac_ones;
+        check("DAC clamps above full scale (gain 255, mix 35): no 1s", (ones <= 1), 1);
+        vw(4'hA, 2'd2, 8'h00); vw(4'hB, 2'd2, 8'h00);
+        vw(4'h9, 2'd2, 8'h00);
+        dac_ones;
+        check("DAC silence: all ones (inverted)", (ones >= 1022), 1);
+        check("cpu_exp driven in game mode", (cpu_exp === 1'b0 || cpu_exp === 1'b1), 1);
+        force dut.osmap.map_idx = 8'hFF; rd(16'h0000); release dut.osmap.map_idx;
+        check("cpu_exp released in menu mode", cpu_exp, 1'bz);
+        reg_w(8'h89, 8'd128);
         reg_w(8'h83, M);
 
         // ---------------------------------------------------------------- menu clears

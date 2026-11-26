@@ -18,6 +18,7 @@ class CPU:
         self.pc = 0
         self.cycles = 0
         self.nmi_pending = False
+        self.irq_line = None        # callable: True while /IRQ is low (level-triggered)
         self.halted = False         # set on an unknown opcode
         self.last_opcode_pc = 0
         self._build()
@@ -337,10 +338,20 @@ class CPU:
         self.pc = self.r16(0xFFFA)
         self.cycles += 7
 
+    def irq(self):
+        self.push(self.pc >> 8)
+        self.push(self.pc & 0xFF)
+        self.push((self.p & ~B) | U)
+        self.p |= I
+        self.pc = self.r16(0xFFFE)
+        self.cycles += 7
+
     def step(self):
         if self.nmi_pending:
             self.nmi_pending = False
             self.nmi()
+        elif self.irq_line is not None and not (self.p & I) and self.irq_line():
+            self.irq()
         self.last_opcode_pc = self.pc
         op = self.fetch()
         ent = self.table.get(op)
