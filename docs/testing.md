@@ -15,7 +15,8 @@ cores/tb/run.sh          (Icarus Verilog 12; on Windows through WSL:
 | `tb_mmc1.v` | MMC1 serial port, PRG/CHR modes, mirroring, PRG RAM, SUROM |
 | `tb_mmc3.v` | MMC3 banking, PRG RAM protect, scanline IRQ with a PPU fetch model (A12 filter, latch 0, BG/sprite table layouts) |
 | `tb_mmc5.v` | MMC5 PRG/CHR/RAM, nametables, fill mode, ExRAM, scanline detection and IRQ from real PPU reads, 8x16 sets, extended attributes, vertical split (left/right, counter, attributes, `$5202`); monitors that the data buses are only driven when allowed |
-| `tb_simple.v` | discrete mappers (`-Ptb_simple.M=<mapper>`): UxROM |
+| `tb_simple.v` | discrete mappers (`-Ptb_simple.M=<mapper>`): UxROM, CNROM, AxROM, GxROM, Color Dreams, BNROM / NINA-001 (both paths, NINA's registers in its RAM), Camerica (bank only at `$C000-$FFFF`, Micro Machines' `$8000` write ignored, Fire Hawk one-screen after `$9000`) |
+| `tb_vrc4.v` | VRC2/VRC4 (`-Ptb_vrc4.M=21/22/23/25`): both address-line pairs, PRG incl. swap mode, CHR 9 bits / VRC2a shift, mirroring, PRG RAM, IRQ wiring (nibble latch, control, acknowledge; the IRQ itself via `tb_vrc6`) |
 | `tb_mmc2.v` | MMC2/MMC4 (`-Ptb_mmc2.M=9` / `10`): PRG layouts, MMC4 PRG RAM, CHR latch pairs, trigger addresses (exact vs. row), switch after the read, nametable reads ignored, mirroring, menu reset |
 | `tb_mmc5_snd.v` | MMC5 sound against `tools/n8sim/mmc5_audio.py`, cycle for cycle (as `tb_fds_snd`): pulse timers and duties, periods < 8, envelope incl. loop, length counter at 240 Hz incl. halt and `$5015`, PCM write/read mode, `$00` -> IRQ flag, `$5010`/`$5015` reads |
 | `tb_fds_snd.v` | FDS sound against `tools/n8sim/fds_audio.py`, cycle for cycle (`fds_audio.py gen` writes the stimulus, `check` compares): wave, modulation, envelopes, master volume, halts, write protection, reads |

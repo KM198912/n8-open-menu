@@ -12,9 +12,16 @@ revision sets the `MAPPER` parameter and becomes its own RBF:
 | 7 AxROM     | `n8_axrom`| `map_simple.v` | `/EDFC/MAPS/107.RBF` |
 | 9 MMC2      | `n8_mmc2` | `map_mmc2.v` | `/EDFC/MAPS/109.RBF`   |
 | 10 MMC4     | `n8_mmc4` | `map_mmc2.v` | `/EDFC/MAPS/110.RBF`   |
+| 21 VRC4a/c  | `n8_vrc21`| `map_vrc4.v` | `/EDFC/MAPS/121.RBF` |
+| 22 VRC2a    | `n8_vrc22`| `map_vrc4.v` | `/EDFC/MAPS/122.RBF` |
+| 23 VRC2b/4e | `n8_vrc23`| `map_vrc4.v` | `/EDFC/MAPS/123.RBF` |
 | 24 VRC6a    | `n8_vrc6a`| `map_vrc6.v` | `/EDFC/MAPS/124.RBF` |
+| 25 VRC2c/4b/4d | `n8_vrc25`| `map_vrc4.v` | `/EDFC/MAPS/125.RBF` |
 | 26 VRC6b    | `n8_vrc6b`| `map_vrc6.v` | `/EDFC/MAPS/126.RBF` |
 | 66 GxROM    | `n8_gxrom`| `map_simple.v` | `/EDFC/MAPS/166.RBF` |
+| 71 Camerica | `n8_camerica` | `map_simple.v` | `/EDFC/MAPS/171.RBF` |
+| 11 Color Dreams | `n8_cdream` | `map_simple.v` | `/EDFC/MAPS/111.RBF` |
+| 34 BNROM / NINA-001 | `n8_m34` | `map_simple.v` | `/EDFC/MAPS/134.RBF` |
 | 4 MMC3      | `n8_mmc3` | `map_mmc3.v` | `/EDFC/MAPS/104.RBF`   |
 | 5 MMC5      | `n8_mmc5` | `map_mmc5.v` | `/EDFC/MAPS/105.RBF`   |
 | FDS (`$FE`) | `n8_fds`  | `map_fds.v`  | `/EDFC/MAPS/120.RBF`   |
@@ -38,6 +45,8 @@ Sources:
   write PRG SRAM in game mode (`prg_wok`: its RAM and disk image live
   there). How the disk reaches the CPU despite the SRAM taking A0-A9 from
   the console bus: see the comment at the top of `map_fds.v`.
+- `vrc_irq.v`: the Konami VRC IRQ (prescaler, cycle mode, NTSC-on-PAL
+  correction), shared by VRC4 and VRC6.
 - `aud_dac.v`: expansion audio DAC on `cpu_exp` (gain `$89`, sigma-delta),
   shared by VRC6, FDS and MMC5; `fds_snd.v`: the FDS sound unit;
   `mmc5_snd.v`: the MMC5's two pulses and PCM channel.

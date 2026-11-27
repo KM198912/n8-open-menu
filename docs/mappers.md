@@ -5,7 +5,7 @@ screen (151 mappers), and where n8-open stands on each. Our RBF number
 is 100 + mapper, in `/EDFC/MAPS/`. Names are filled in where they are
 well known; `-` = still to look up (NESdev wiki).
 
-n8-open: 12 of 151 have a core (see the status column).
+n8-open: 19 of 151 have a core (see the status column).
 
 | Mapper | Name | Status | RBF | Tested with |
 |---:|---|---|---|---|
@@ -14,29 +14,29 @@ n8-open: 12 of 151 have a core (see the status column).
 | 2 | UxROM | done | `102.RBF` | Castlevania (USA, Europe) |
 | 3 | CNROM | done | `103.RBF` | Solomon's Key |
 | 4 | MMC3 (TxROM) | done | `104.RBF` | Super Mario Bros. 3, Darkwing Duck |
-| 5 | MMC5 (ExROM) | partial: saves 8 KB only | `105.RBF` | Castlevania III, Just Breed, Nobunaga's Ambition II, Uchuu Keibitai SDF |
+| 5 | MMC5 (ExROM) | partial: saves 8 KB only | `105.RBF` | Castlevania III, Just Breed, Nobunaga's Ambition II, Uchuu Keibitai SDF, Hero of Aethel |
 | 7 | AxROM | done | `107.RBF` | Battletoads |
 | 9 | MMC2 (PxROM) | done | `109.RBF` | Mike Tyson's Punch-Out!! |
 | 10 | MMC4 (FxROM) | done | `110.RBF` | Fire Emblem Gaiden (incl. battery save) |
-| 11 | Color Dreams | open | - | - |
+| 11 | Color Dreams | done | `111.RBF` | Crystal Mines |
 | 12 | - | open | - | - |
 | 13 | CPROM | open | - | - |
 | 15 | - | open | - | - |
 | 16 | Bandai FCG | open | - | - |
 | 18 | Jaleco SS88006 | open | - | - |
 | 19 | Namco 163 | open | - | - |
-| 21 | VRC4a / VRC4c | open | - | - |
-| 22 | VRC2a | open | - | - |
-| 23 | VRC2b / VRC4e/f | open | - | - |
+| 21 | VRC4a / VRC4c | done (hardware test open) | `121.RBF` | - |
+| 22 | VRC2a | done (hardware test open) | `122.RBF` | - |
+| 23 | VRC2b / VRC4e/f | done (hardware test open) | `123.RBF` | - |
 | 24 | VRC6a | done (incl. audio) | `124.RBF` | Akumajou Densetsu |
-| 25 | VRC4b/d / VRC2c | open | - | - |
-| 26 | VRC6b | testbench only, not tried on hardware | `126.RBF` | - |
+| 25 | VRC4b/d / VRC2c | done (hardware test open) | `125.RBF` | - |
+| 26 | VRC6b | done | `126.RBF` | Mouryou Senki Madara |
 | 28 | Action 53 | open | - | - |
 | 30 | UNROM 512 | open | - | - |
 | 31 | - | open | - | - |
 | 32 | Irem G-101 | open | - | - |
 | 33 | Taito TC0190 | open | - | - |
-| 34 | BNROM / NINA-001 | open | - | - |
+| 34 | BNROM / NINA-001 | done | `134.RBF` | Deadly Towers (BNROM), Impossible Mission II (NINA-001) |
 | 36 | - | open | - | - |
 | 37 | - | open | - | - |
 | 38 | - | open | - | - |
@@ -59,7 +59,7 @@ n8-open: 12 of 151 have a core (see the status column).
 | 68 | Sunsoft-4 | open | - | - |
 | 69 | Sunsoft FME-7 / 5B | open | - | - |
 | 70 | - | open | - | - |
-| 71 | Camerica / Codemasters | open | - | - |
+| 71 | Camerica / Codemasters | done | `171.RBF` | Micro Machines, Fire Hawk |
 | 72 | - | open | - | - |
 | 73 | VRC3 | open | - | - |
 | 74 | - | open | - | - |

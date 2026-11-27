@@ -169,7 +169,8 @@ module n8_top #(
             );
             assign gm_aud_en = 1'b1;
             assign gm_prg_wok = 1'b0;
-        end else if (MAPPER == 2 || MAPPER == 3 || MAPPER == 7 || MAPPER == 66) begin : g_simple
+        end else if (MAPPER == 2 || MAPPER == 3 || MAPPER == 7 || MAPPER == 66 ||
+                     MAPPER == 71 || MAPPER == 11 || MAPPER == 34) begin : g_simple
             // simple discrete mappers (map_simple.v)
             map_simple #(.MAPPER(MAPPER)) simple (
                 .mclk(mclk), .m2(cpu_m2), .rst(os_mode), .cpu_dat(cpu_dat),
@@ -218,6 +219,22 @@ module n8_top #(
             assign gm_ppu_oe = 1'b0;  assign gm_ppu_do = 8'h00;
             assign gm_aud_en = 1'b1;
             assign gm_prg_wok = 1'b1;
+        end else if (MAPPER == 21 || MAPPER == 22 || MAPPER == 23 || MAPPER == 25) begin : g_vrc4
+            // Konami VRC2 / VRC4 (map_vrc4.v; IRQ: vrc_irq.v, as the VRC6)
+            map_vrc4 #(.MAPPER(MAPPER)) vrc4 (
+                .mclk(mclk), .m2(cpu_m2), .clk(clk), .ppu_rd(ppu_rd), .map_cfg(map_cfg),
+                .rst(os_mode), .cpu_dat(cpu_dat),
+                .cpu_addr(cpu_addr), .cpu_ce(cpu_ce), .cpu_rw(cpu_rw),
+                .ppu_addr(ppu_addr), .ppu_wr(ppu_wr),
+                .chr_is_ram(chr_is_ram),
+                .prg_a(gm_prg_a), .prg_rom(gm_prg_rom), .prg_ram(gm_prg_ram), .prg_wr(gm_prg_wr),
+                .chr_a(gm_chr_a), .chr_sel(gm_chr_sel), .chr_wr(gm_chr_wr),
+                .ciram_a10(gm_ciram_a10), .ciram_sel(gm_ciram_sel), .irq(gm_irq)
+            );
+            assign gm_cpu_oe = 1'b0;  assign gm_cpu_do = 8'h00;
+            assign gm_ppu_oe = 1'b0;  assign gm_ppu_do = 8'h00;
+            assign gm_aud = 1'b0;     assign gm_aud_en = 1'b0;
+            assign gm_prg_wok = 1'b0;
         end else if (MAPPER == 9 || MAPPER == 10) begin : g_mmc2
             // MMC2 / MMC4 (CHR latches on PPU reads of tiles $FD/$FE)
             map_mmc2 #(.MAPPER(MAPPER)) mmc2 (

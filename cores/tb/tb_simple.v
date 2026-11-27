@@ -38,7 +38,7 @@ module tb_simple;
 
     integer fails = 0, checks = 0;
     reg [8:0] s_prg_map, s_chr_map;
-    reg s_prg_ce, s_prg_we, s_ram_ce, s_a10;
+    reg s_prg_ce, s_prg_we, s_ram_ce, s_ram_we, s_a10;
 
     task cycle(input [15:0] addr, input wr, input [7:0] d);
         begin
@@ -47,7 +47,7 @@ module tb_simple;
             m2 = 1;
             #240;
             s_prg_map = prg_map; s_prg_ce = prg_ce; s_prg_we = prg_we;
-            s_ram_ce = ram_ce; s_a10 = ppu_ciram_a10; s_chr_map = chr_map;
+            s_ram_ce = ram_ce; s_ram_we = ram_we; s_a10 = ppu_ciram_a10; s_chr_map = chr_map;
             #40;
             m2 = 0;
             #10;
@@ -208,6 +208,110 @@ module tb_simple;
             chr8(14'h0000, 6'd1, "GxROM 16 KB CHR: 3 & 1 = 1");
             setup(8'h03, 8'h01, 8'h01);
             chr8(14'h0000, 6'd0, "GxROM: banks cleared by the menu");
+        end
+
+        if (M == 71) begin
+            // ---- Camerica / Codemasters: 256 KB PRG (16 x 16 KB), 8 KB CHR RAM, vertical
+            setup(8'h0F, 8'h80, 8'h01);
+            prg16(16'h8000, 5'd0, "M71 power-on $8000 = bank 0");
+            prg16(16'hC000, 5'd15, "M71 $C000 = last bank");
+            wr(16'hC000, 8'h05);
+            prg16(16'h8000, 5'd5, "M71 write at $C000 selects bank 5");
+            prg16(16'hFFFC, 5'd15, "M71 reset vector stays in the last bank");
+            wr(16'hFFFF, 8'h0B);
+            prg16(16'hBFFF, 5'd11, "M71 write at $FFFF (whole $C000-$FFFF)");
+            wr(16'h8000, 8'h00);                     // Micro Machines at start
+            prg16(16'h8000, 5'd11, "M71 $8000 write does not change the bank");
+            a10_at(14'h2400, 1, "M71 after $8000 = 0: still header vertical ($2400 -> 1)");
+            a10_at(14'h2800, 0, "M71 vertical: $2800 -> 0");
+            wr(16'hA000, 8'h03);
+            prg16(16'h8000, 5'd11, "M71 $A000 write does not change the bank");
+            pa = 14'h1C00; #20; rd(16'h0000);
+            check("M71 CHR RAM: 8 KB, no banking", s_chr_map, 9'd7);
+            wr(16'h9000, 8'h10);                     // Fire Hawk: one screen, upper
+            a10_at(14'h2000, 1, "M71 $9000 bit 4 = 1: one screen upper ($2000)");
+            a10_at(14'h2C00, 1, "M71 one screen upper ($2C00)");
+            wr(16'h9FFF, 8'h00);
+            a10_at(14'h2400, 0, "M71 $9FFF bit 4 = 0: one screen lower ($2400)");
+            a10_at(14'h2800, 0, "M71 one screen lower ($2800)");
+            prg16(16'h8000, 5'd11, "M71 $9000 writes do not change the bank");
+            wr(16'h8000, 8'h10);
+            a10_at(14'h2000, 0, "M71 $8000-$8FFF write ignored for mirroring");
+            // ---- horizontal header, back to the menu
+            setup(8'h0F, 8'h80, 8'h00);
+            prg16(16'h8000, 5'd0, "M71: bank cleared by the menu");
+            a10_at(14'h2400, 0, "M71 menu: one-screen mode cleared, header horizontal ($2400 -> 0)");
+            a10_at(14'h2800, 1, "M71 horizontal: $2800 -> 1");
+            setup(8'h1F, 8'h80, 8'h00);             // 512 KB mask: only the register limits
+            wr(16'hC000, 8'h1F);
+            prg16(16'h8000, 5'd15, "M71 bank register 4 bits: $1F -> 15 (512 KB mask)");
+        end
+
+        if (M == 11) begin
+            // ---- Color Dreams: 128 KB PRG (8 x 16 KB), 128 KB CHR ROM (16 x 8 KB), vertical
+            setup(8'h07, 8'h0F, 8'h01);
+            prg16(16'h8000, 5'd0, "M11 power-on: PRG 32K bank 0");
+            chr8(14'h0000, 6'd0, "M11 power-on: CHR bank 0");
+            wr(16'h8000, 8'hA3);                     // CHR 10, lockout bits 0, PRG 3
+            prg16(16'h8000, 5'd6, "M11 PRG bits 1:0 = 3 -> 16K 6");
+            prg16(16'hC000, 5'd7, "M11 PRG 32K: 16K 7 at $C000");
+            chr8(14'h0000, 6'd10, "M11 CHR bits 7:4 = 10");
+            chr8(14'h1C00, 6'd10, "M11 CHR 8 KB bank covers $1C00");
+            wr(16'hFFF0, 8'h5D);                     // bits 3:2 (lockout) set: ignored
+            prg16(16'h8000, 5'd2, "M11 PRG 1 (lockout bits ignored)");
+            chr8(14'h0400, 6'd5, "M11 CHR 5");
+            a10_at(14'h2400, 1, "M11 header vertical: $2400 -> 1");
+            setup(8'h03, 8'h07, 8'h00);              // 64 KB PRG, 64 KB CHR, horizontal
+            wr(16'h8000, 8'hF3);
+            prg16(16'h8000, 5'd2, "M11 64 KB: PRG 3 & 1 = 1 -> 16K 2");
+            chr8(14'h0000, 6'd7, "M11 64 KB CHR: 15 & 7 = 7");
+            a10_at(14'h2800, 1, "M11 header horizontal: $2800 -> 1");
+            setup(8'h07, 8'h0F, 8'h01);
+            chr8(14'h0000, 6'd0, "M11: bank cleared by the menu");
+        end
+
+        if (M == 34) begin
+            // ---- BNROM path: 128 KB PRG, 8 KB CHR RAM, vertical
+            setup(8'h07, 8'h80, 8'h01);
+            prg16(16'h8000, 5'd0, "M34 power-on: PRG 32K bank 0");
+            pa = 14'h0400; #20; rd(16'h0000);
+            check("M34 BNROM start: $0400 in 8 KB bank 0 (4K 0)", s_chr_map, 9'd1);
+            pa = 14'h1C00; #20; rd(16'h0000);
+            check("M34 BNROM start: $1C00 in 8 KB bank 0 (4K 1)", s_chr_map, 9'd7);
+            wr(16'h8000, 8'h03);
+            prg16(16'h8000, 5'd6, "M34 BNROM $8000 bits 1:0 = 3 -> 16K 6");
+            prg16(16'hFFFC, 5'd7, "M34 BNROM 32 KB window");
+            wr(16'hC000, 8'h01);
+            prg16(16'h8000, 5'd2, "M34 BNROM write anywhere in $8000-$FFFF");
+            pa = 14'h1C00; #20; rd(16'h0000);
+            check("M34 BNROM: PRG writes leave CHR unbanked", s_chr_map, 9'd7);
+            a10_at(14'h2400, 1, "M34 header vertical");
+            // ---- NINA-001 path: 128 KB PRG mask (more than NINA's 64 KB, so that
+            // only the register limits the bank), 64 KB CHR ROM (16 x 4 KB), horizontal
+            setup(8'h07, 8'h07, 8'h00);
+            cycle(16'h7FFD, 1, 8'h01);
+            check("M34 NINA $7FFD write also goes to PRG RAM", s_ram_we, 0); rd(16'h0000);
+            prg16(16'h8000, 5'd2, "M34 NINA $7FFD bit 0 = 1 -> 16K 2");
+            prg16(16'hC000, 5'd3, "M34 NINA 32 KB window");
+            wr(16'h7FFE, 8'h09);
+            wr(16'h7FFF, 8'h0E);
+            pa = 14'h0800; #20; rd(16'h0000);
+            check("M34 NINA $7FFE = 9: $0800 -> 4K 9", s_chr_map[8:2], 7'd9);
+            check("M34 NINA CHR A11-A10 from the PPU", s_chr_map[1:0], 2'b10);
+            pa = 14'h1000; #20; rd(16'h0000);
+            check("M34 NINA $7FFF = 14: $1000 -> 4K 14", s_chr_map[8:2], 7'd14);
+            wr(16'h7FFD, 8'hFE);
+            prg16(16'h8000, 5'd0, "M34 NINA $7FFD bit 0 only");
+            wr(16'h7FFC, 8'h01);
+            prg16(16'h8000, 5'd0, "M34 $7FFC is no register");
+            wr(16'h6000, 8'h0F);
+            pa = 14'h0000; #20; rd(16'h0000);
+            check("M34 $6000 is RAM only (CHR unchanged)", s_chr_map[8:2], 7'd9);
+            rd(16'h6123); check("M34 PRG RAM at $6000", s_ram_ce, 1);
+            a10_at(14'h2800, 1, "M34 header horizontal");
+            setup(8'h03, 8'h07, 8'h00);
+            pa = 14'h1000; #20; rd(16'h0000);
+            check("M34 menu: CHR $1000 back to 4K 1", s_chr_map[8:2], 7'd1);
         end
 
         $display("mapper %0d: %0d checks, %0d failed", M, checks, fails);

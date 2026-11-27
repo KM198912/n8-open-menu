@@ -94,6 +94,46 @@
 
 ## Done
 
+- **Konami VRC2 / VRC4: mappers 21, 22, 23, 25** (2026-11-27, simulation):
+  `cores/nrom/map_vrc4.v`, revisions `n8_vrc21/22/23/25` -> `121/122/123/
+  125.RBF`. The VRC IRQ moved from `map_vrc6.v` into the shared
+  `vrc_irq.v` (incl. the PAL correction; `tb_vrc6` unchanged 77/77 for both
+  VRC6 variants, IRQ mutants in the moved module still caught). From the
+  wiki: per mapper both address-line pairs ORed (21 A1/A2 + A6/A7, 22
+  A1/A0, 23 A0/A1 + A2/A3, 25 A1/A0 + A3/A2), VRC4 presumed for 21/23/25
+  (one-screen mirroring, swap mode, 9-bit CHR, IRQ), VRC2a for 22 (V/H,
+  CHR >> 1, no IRQ). Decisions: 8 KB PRG RAM always on (the VRC2 `$6000`
+  latch read-back of Contra (J) / Ganbare Goemon 2 works through it), the
+  VRC2a shift on all eight CHR registers. `tb_vrc4` 47 (21/23/25) / 36
+  (22) checks, 14 mutations caught. Hardware test open: TMNT (J) / Gradius
+  2 (J) (25), Wai Wai World 2 (21), Tiny Toon Adventures (J) / Contra (J)
+  (23), TwinBee 3 (22).
+
+- **Mappers 11 (Color Dreams) + 34 (BNROM / NINA-001)** (2026-11-27;
+  hardware: Crystal Mines (11), Deadly Towers (34 BNROM) and Impossible
+  Mission II (34 NINA-001, registers in the RAM area) - both boards from
+  the one `134.RBF`): `map_simple.v`, revisions `n8_cdream` -> `111.RBF`, `n8_m34`
+  -> `134.RBF`. 11: `$8000-$FFFF` bits 1:0 = 32 KB PRG, bits 7:4 = 8 KB CHR
+  (bits 3:2 lockout only). 34: BNROM (`$8000-$FFFF` bits 1:0) and NINA-001
+  (`$7FFD` PRG, `$7FFE`/`$7FFF` 4 KB CHR, 8 KB PRG RAM, writes also into
+  the RAM) in one core instead of the emulators' choice by CHR size - each
+  board's games never touch the other's registers; CHR registers start at
+  0/1 = BNROM's unbanked 8 KB (our decision; power-on undefined in the
+  wiki). `tb_simple` 18 / 28 checks, 7 mutations caught (the `$7FFD`
+  width one after widening the test's PRG mask).
+
+- **Mapper 71: Camerica / Codemasters** (2026-11-27; hardware: Micro
+  Machines plays fine):
+  `map_simple.v` (`MAPPER 71`), revision `n8_camerica` -> `171.RBF`. 16 KB
+  bank from writes to `$C000-$FFFF` (4 bits), last 16 KB fixed, CHR RAM,
+  header mirroring; Fire Hawk's one-screen mirroring (`$8000-$9FFF` bit 4)
+  only after a write to `$9000-$9FFF` - FCEUX's rule from the wiki, because
+  Micro Machines and Ultimate Stuntman write `$00` to `$8000` at start.
+  `tb_simple` M=71 30 checks, 7 mutations caught (the 4-bit bank one after
+  testing with a 512 KB mask). Fire Hawk: playfield and fixed cockpit
+  cleanly split in flight (its one-screen switching at `$9000`) - the
+  FCEUX rule holds for both games.
+
 - **MMC2 (mapper 9) + MMC4 (mapper 10)** (2026-11-27; hardware: Mike
   Tyson's Punch-Out!! (MMC2); Fire Emblem Gaiden (MMC4) incl. the battery
   save across a power cycle):
@@ -120,7 +160,8 @@
   starts `hello.nes`, A on a folder enters, Start and paging unchanged.
 
 - **MMC5 phase 4: audio** (2026-11-27; hardware: Uchuu Keibitai SDF sounds
-  the same as in FCEUX - effects on dying, none on shooting there either):
+  the same as in FCEUX - effects on dying, none on shooting there either;
+  the build with split + audio also runs Hero of Aethel in game):
   `cores/nrom/mmc5_snd.v`
   - two pulses (as the APU's, no sweep, periods < 8 not muted, envelope and
   length counter at a fixed 240 Hz = M2 / 7424, the die estimate) and the
@@ -277,7 +318,9 @@
   saw, silence). Hardware: on an original N8 the test ROM plays every part
   and the menu runs; on our clone only part 1 (2A03) is audible, while
   Akumajou Densetsu's VRC6 bass comes through - a limit of that clone's
-  board, not of the core.
+  board, not of the core. VRC6b (`126.RBF`, 2026-11-27): Mouryou Senki
+  Madara on hardware - intro, town, battle (picture and play; audio only
+  as far as the clone passes it).
 - **NTSC games on PAL consoles** (2026-11-25): menu `src/region.s`
   measures the console (15-cycle loop between vblank flags: NTSC ~1985,
   PAL ~2217, Dendy ~2364 passes) and the game's region (NES 2.0 byte 12,

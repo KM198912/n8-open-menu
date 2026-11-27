@@ -28,32 +28,8 @@
 // nametables. Only that is implemented: modes 1-3, CHR-ROM nametables
 // (bit 4) and the bit-5-clear A10 rules are not (see BACKLOG.md).
 //
-// IRQ (VRC IRQ): 8-bit counter counting up; clocked every CPU cycle (cycle
-// mode) or by a prescaler of 341 - 3 per cycle, +341 when <= 0 (scanline
-// mode: 114, 114, 113 cycles = 113 2/3 per NTSC line). On a clock at $FF it
-// reloads the latch and raises the IRQ. Nothing is clocked while E = 0.
-// The wiki's register section says a $F001 write always resets the
-// prescaler, its operation section "with E set"; this follows the register
-// section (the counter is only reloaded with E set either way).
-// Everything runs on the falling M2 edge: one step per CPU cycle.
-//
-// NTSC game on a PAL console (map_cfg[6] = 1, set by the menu): the VRC IRQ
-// counts CPU cycles from the game's NMI, timed for NTSC. On PAL, vblank is
-// 50 lines longer (the count runs out before the picture starts) and a line
-// has 106 9/16 instead of 113 2/3 CPU cycles. With the bit set:
-//   - scanline mode uses the PAL line length (prescaler step 16 instead of
-//     15 on the common base 1705 = 341 x 5);
-//   - in vblank the counter runs only as long as it would on NTSC between
-//     NMI and the pre-render line (20 lines), then holds until the PPU reads
-//     again (pre-render line) - at most PAL_HOLD_MAX cycles, so with
-//     rendering off it never stops for long.
-// The frame position comes from the PPU's reads: none for HOLD_IDLE_CLK
-// board clocks = not rendering (the reads are 2 dots apart while rendering).
-// For a game that sets its IRQ in NMI (the usual pattern) only the hold's
-// length matters - it takes ~50 PAL lines out of the vblank count - not
-// where in vblank it starts.
-// This deliberately departs from the real chip; without the bit the core
-// behaves exactly like a VRC6.
+// IRQ: vrc_irq.v (the VRC IRQ, shared with map_vrc4.v), incl. the
+// NTSC-on-PAL correction (map_cfg[6]); here only its registers are decoded.
 //
 // Sound (NESdev wiki: VRC6 audio), one step per CPU cycle:
 //   $9000/$A000  pulse: bit 7 M (ignore duty), 6:4 duty D, 3:0 volume
@@ -114,12 +90,6 @@ module map_vrc6 #(
     reg [7:0] r0 = 8'd0, r1 = 8'd0, r2 = 8'd0, r3 = 8'd0;
     reg [7:0] r4 = 8'd0, r5 = 8'd0, r6 = 8'd0, r7 = 8'd0;
 
-    reg [7:0] irq_latch = 8'd0;
-    reg [7:0] irq_cnt   = 8'd0;
-    reg signed [11:0] presc = 12'sd1705;     // 341 x 5
-    reg       irq_a = 1'b0, irq_e = 1'b0, irq_m = 1'b0;
-    reg       irq_p = 1'b0;                  // pending
-
     // sound
     reg        p1_m = 1'b0, p2_m = 1'b0, p1_e = 1'b0, p2_e = 1'b0, s_e = 1'b0;
     reg [2:0]  p1_d = 3'd0, p2_d = 3'd0;
@@ -140,50 +110,20 @@ module map_vrc6 #(
     wire [1:0] sub  = (MAPPER == 26) ? { cpu_addr[0], cpu_addr[1] } : cpu_addr[1:0];
     wire       wr   = rom_area & ~cpu_rw;
 
-    // ---------------------------------------------------------------- PAL correction
-    localparam HOLD_IDLE_CLK  = 64;      // 1.28 us without a PPU read: not rendering
-    localparam PAL_HOLD_SCAN  = 2238;    // vblank cycles counted, scanline mode:
-                                         //  1 PAL line to the NMI (107) + 20 lines
-                                         //  of 106 9/16 cycles
-    localparam PAL_HOLD_CYC   = 2380;    // cycle mode: 107 + 20 NTSC lines (2273)
-    localparam PAL_HOLD_MAX   = 5400;    // hold at most this long (PAL - NTSC
-                                         //  vblank: 50 lines = 5328 cycles)
-    wire pal_fix = map_cfg[6];
-
-    // clk domain: is the PPU rendering (reading)?
-    reg [2:0] rd_s = 3'b111;
-    reg [6:0] idle_clk = 7'd0;
-    reg       rendering = 1'b0;
-    always @(posedge clk) begin
-        rd_s <= { rd_s[1:0], ppu_rd };
-        if (rd_s[2] & ~rd_s[1]) begin            // a PPU read started
-            idle_clk  <= 7'd0;
-            rendering <= 1'b1;
-        end else if (idle_clk != HOLD_IDLE_CLK) begin
-            idle_clk <= idle_clk + 7'd1;
-        end else
-            rendering <= 1'b0;
-    end
-
-    // mclk domain: CPU cycles since the PPU stopped reading (vblank start)
-    reg [1:0]  ren_m = 2'b00;
-    reg [12:0] vbl = 13'd0;
-    wire       ren = ren_m[1];
-    wire [12:0] hold_from = irq_m ? PAL_HOLD_CYC : PAL_HOLD_SCAN;
-    wire       hold = pal_fix & ~ren & (vbl >= hold_from) & (vbl < hold_from + PAL_HOLD_MAX);
-
-    // IRQ clock for this CPU cycle (prescaler step: 15 NTSC, 16 PAL)
-    wire signed [11:0] p_next = presc - (pal_fix ? 12'sd16 : 12'sd15);
-    wire       tick = irq_e & ~hold & (irq_m | (p_next <= 12'sd0));
+    // ---------------------------------------------------------------- IRQ
+    vrc_irq virq (
+        .mclk(mclk), .clk(clk), .rst(rst), .ppu_rd(ppu_rd), .pal_fix(map_cfg[6]),
+        .w_latch(wr && page == 3'd7 && sub == 2'd0), .latch_d(cpu_dat),
+        .w_ctrl(wr && page == 3'd7 && sub == 2'd1),
+        .w_ack(wr && page == 3'd7 && sub == 2'd2),
+        .cpu_dat(cpu_dat), .irq(irq)
+    );
 
     always @(negedge mclk) begin
         if (rst) begin
             prg16 <= 4'd0;  prg8 <= 5'd0;  b003 <= 8'd0;
             r0 <= 8'd0; r1 <= 8'd0; r2 <= 8'd0; r3 <= 8'd0;
             r4 <= 8'd0; r5 <= 8'd0; r6 <= 8'd0; r7 <= 8'd0;
-            irq_latch <= 8'd0;  irq_cnt <= 8'd0;  presc <= 12'sd1705;
-            vbl <= 13'd0;       ren_m <= 2'b00;
-            irq_a <= 1'b0;  irq_e <= 1'b0;  irq_m <= 1'b0;  irq_p <= 1'b0;
             p1_e <= 1'b0;   p2_e <= 1'b0;   s_e <= 1'b0;    s_acc <= 8'd0;
             p1_step <= 4'd15;  p2_step <= 4'd15;  s_cnt <= 4'd0;
             f_halt <= 1'b0; f16 <= 1'b0;    f256 <= 1'b0;   mix <= 6'd0;
@@ -231,24 +171,6 @@ module map_vrc6 #(
                      + (s_e ? { 1'b0, s_acc[7:3] } : 6'd0);
             end
 
-            // ---- frame position (PAL correction)
-            ren_m <= { ren_m[0], rendering };
-            if (ren)
-                vbl <= 13'd0;
-            else if (vbl != 13'h1FFF)
-                vbl <= vbl + 13'd1;
-
-            // ---- IRQ counter, one step per CPU cycle
-            if (irq_e && !irq_m && !hold)
-                presc <= (p_next <= 12'sd0) ? p_next + 12'sd1705 : p_next;
-            if (tick) begin
-                if (irq_cnt == 8'hFF) begin
-                    irq_cnt <= irq_latch;
-                    irq_p   <= 1'b1;
-                end else
-                    irq_cnt <= irq_cnt + 8'd1;
-            end
-
             // ---- register writes (later assignments win)
             if (wr) begin
                 case (page)
@@ -284,23 +206,7 @@ module map_vrc6 #(
                               2'd2: r6 <= cpu_dat;
                               default: r7 <= cpu_dat;
                           endcase
-                    3'd7: case (sub)                                    // $F000
-                              2'd0: irq_latch <= cpu_dat;
-                              2'd1: begin                               // control
-                                        irq_a <= cpu_dat[0];
-                                        irq_e <= cpu_dat[1];
-                                        irq_m <= cpu_dat[2];
-                                        irq_p <= 1'b0;
-                                        presc <= 12'sd1705;
-                                        if (cpu_dat[1])
-                                            irq_cnt <= irq_latch;
-                                    end
-                              2'd2: begin                               // acknowledge
-                                        irq_p <= 1'b0;
-                                        irq_e <= irq_a;
-                                    end
-                              default: ;
-                          endcase
+                    // $F000-$F002: IRQ (vrc_irq above)
                     default: ;
                 endcase
             end
@@ -351,7 +257,6 @@ module map_vrc6 #(
     end
     assign ciram_sel = ppu_addr[13];
 
-    assign irq = irq_p;
 
     // ---------------------------------------------------------------- sound helpers
     // effective period ($9003: >> 8 overrides >> 4). The flags are passed as

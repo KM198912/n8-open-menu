@@ -23,7 +23,7 @@
 <text x="323.5" y="12.5" font-size="13" text-anchor="middle" dominant-baseline="central" fill="#141414">9</text>
 <rect x="340.5" y="0.5" width="34" height="24" fill="#58C478" stroke="#969696"/>
 <text x="357.5" y="12.5" font-size="13" text-anchor="middle" dominant-baseline="central" fill="#141414">10</text>
-<rect x="374.5" y="0.5" width="34" height="24" fill="#F2CC4C" stroke="#969696"/>
+<rect x="374.5" y="0.5" width="34" height="24" fill="#58C478" stroke="#969696"/>
 <text x="391.5" y="12.5" font-size="13" text-anchor="middle" dominant-baseline="central" fill="#141414">11</text>
 <rect x="408.5" y="0.5" width="34" height="24" fill="#F2CC4C" stroke="#969696"/>
 <text x="425.5" y="12.5" font-size="13" text-anchor="middle" dominant-baseline="central" fill="#141414">12</text>
@@ -43,15 +43,15 @@
 <text x="119.5" y="36.5" font-size="13" text-anchor="middle" dominant-baseline="central" fill="#141414">19</text>
 <rect x="136.5" y="24.5" width="34" height="24" fill="#FFFFFF" stroke="#969696"/>
 <text x="153.5" y="36.5" font-size="13" text-anchor="middle" dominant-baseline="central" fill="#141414">20</text>
-<rect x="170.5" y="24.5" width="34" height="24" fill="#F2CC4C" stroke="#969696"/>
+<rect x="170.5" y="24.5" width="34" height="24" fill="#58C478" stroke="#969696"/>
 <text x="187.5" y="36.5" font-size="13" text-anchor="middle" dominant-baseline="central" fill="#141414">21</text>
-<rect x="204.5" y="24.5" width="34" height="24" fill="#F2CC4C" stroke="#969696"/>
+<rect x="204.5" y="24.5" width="34" height="24" fill="#58C478" stroke="#969696"/>
 <text x="221.5" y="36.5" font-size="13" text-anchor="middle" dominant-baseline="central" fill="#141414">22</text>
-<rect x="238.5" y="24.5" width="34" height="24" fill="#F2CC4C" stroke="#969696"/>
+<rect x="238.5" y="24.5" width="34" height="24" fill="#58C478" stroke="#969696"/>
 <text x="255.5" y="36.5" font-size="13" text-anchor="middle" dominant-baseline="central" fill="#141414">23</text>
 <rect x="272.5" y="24.5" width="34" height="24" fill="#58C478" stroke="#969696"/>
 <text x="289.5" y="36.5" font-size="13" text-anchor="middle" dominant-baseline="central" fill="#141414">24</text>
-<rect x="306.5" y="24.5" width="34" height="24" fill="#F2CC4C" stroke="#969696"/>
+<rect x="306.5" y="24.5" width="34" height="24" fill="#58C478" stroke="#969696"/>
 <text x="323.5" y="36.5" font-size="13" text-anchor="middle" dominant-baseline="central" fill="#141414">25</text>
 <rect x="340.5" y="24.5" width="34" height="24" fill="#58C478" stroke="#969696"/>
 <text x="357.5" y="36.5" font-size="13" text-anchor="middle" dominant-baseline="central" fill="#141414">26</text>
@@ -69,7 +69,7 @@
 <text x="17.5" y="60.5" font-size="13" text-anchor="middle" dominant-baseline="central" fill="#141414">32</text>
 <rect x="34.5" y="48.5" width="34" height="24" fill="#F2CC4C" stroke="#969696"/>
 <text x="51.5" y="60.5" font-size="13" text-anchor="middle" dominant-baseline="central" fill="#141414">33</text>
-<rect x="68.5" y="48.5" width="34" height="24" fill="#F2CC4C" stroke="#969696"/>
+<rect x="68.5" y="48.5" width="34" height="24" fill="#58C478" stroke="#969696"/>
 <text x="85.5" y="60.5" font-size="13" text-anchor="middle" dominant-baseline="central" fill="#141414">34</text>
 <rect x="102.5" y="48.5" width="34" height="24" fill="#FFFFFF" stroke="#969696"/>
 <text x="119.5" y="60.5" font-size="13" text-anchor="middle" dominant-baseline="central" fill="#141414">35</text>
@@ -143,7 +143,7 @@
 <text x="187.5" y="108.5" font-size="13" text-anchor="middle" dominant-baseline="central" fill="#141414">69</text>
 <rect x="204.5" y="96.5" width="34" height="24" fill="#F2CC4C" stroke="#969696"/>
 <text x="221.5" y="108.5" font-size="13" text-anchor="middle" dominant-baseline="central" fill="#141414">70</text>
-<rect x="238.5" y="96.5" width="34" height="24" fill="#F2CC4C" stroke="#969696"/>
+<rect x="238.5" y="96.5" width="34" height="24" fill="#58C478" stroke="#969696"/>
 <text x="255.5" y="108.5" font-size="13" text-anchor="middle" dominant-baseline="central" fill="#141414">71</text>
 <rect x="272.5" y="96.5" width="34" height="24" fill="#F2CC4C" stroke="#969696"/>
 <text x="289.5" y="108.5" font-size="13" text-anchor="middle" dominant-baseline="central" fill="#141414">72</text>
@@ -514,9 +514,9 @@
 <rect x="510.5" y="360.5" width="34" height="24" fill="#FFFFFF" stroke="#969696"/>
 <text x="527.5" y="372.5" font-size="13" text-anchor="middle" dominant-baseline="central" fill="#141414">255</text>
 <rect x="4.5" y="390.5" width="246" height="22" fill="#58C478" stroke="#969696"/>
-<text x="12" y="401.5" font-size="14" dominant-baseline="central" fill="#141414">n8-open core: 12</text>
+<text x="12" y="401.5" font-size="14" dominant-baseline="central" fill="#141414">n8-open core: 19</text>
 <rect x="4.5" y="416.5" width="246" height="22" fill="#F2CC4C" stroke="#969696"/>
-<text x="12" y="427.5" font-size="14" dominant-baseline="central" fill="#141414">original firmware only: 139</text>
+<text x="12" y="427.5" font-size="14" dominant-baseline="central" fill="#141414">original firmware only: 132</text>
 <rect x="4.5" y="442.5" width="246" height="22" fill="#FFFFFF" stroke="#969696"/>
 <text x="12" y="453.5" font-size="14" dominant-baseline="central" fill="#141414">neither: 105</text>
 <rect x="256" y="390" width="285" height="78" fill="#20242C"/>

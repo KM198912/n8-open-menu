@@ -14,6 +14,8 @@ set_global_assignment -name VERILOG_FILE map_mmc1.v
 set_global_assignment -name VERILOG_FILE map_mmc3.v
 set_global_assignment -name VERILOG_FILE map_mmc5.v
 set_global_assignment -name VERILOG_FILE map_mmc2.v
+set_global_assignment -name VERILOG_FILE map_vrc4.v
+set_global_assignment -name VERILOG_FILE vrc_irq.v
 set_global_assignment -name VERILOG_FILE mmc5_snd.v
 set_global_assignment -name VERILOG_FILE map_simple.v
 set_global_assignment -name VERILOG_FILE map_vrc6.v

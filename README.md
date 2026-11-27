@@ -38,8 +38,12 @@ Generated from `cores/cores.txt` and `docs/mappers.md` by
 | MMC5 (5) | `105.RBF` - banking, ExRAM, fill mode, scanline IRQ, extended attributes, split screen, audio (2 pulses + PCM on `cpu_exp`); saves 8 KB only |
 | AxROM (7) | `107.RBF` |
 | MMC2 (9), MMC4 (10) | `109.RBF`, `110.RBF` - CHR latches ($FD/$FE tiles); MMC4 with PRG RAM |
+| VRC2 / VRC4 (21, 22, 23, 25) | `121.RBF`, `122.RBF`, `123.RBF`, `125.RBF` - banking, IRQ, both address wirings per mapper |
 | VRC6 (24, 26) | `124.RBF`, `126.RBF` - banking, IRQ, audio (2 pulses + saw on `cpu_exp`) |
 | GxROM (66) | `166.RBF` |
+| Camerica / Codemasters (71) | `171.RBF` - incl. Fire Hawk's one-screen mirroring |
+| Color Dreams (11) | `111.RBF` |
+| BNROM / NINA-001 (34) | `134.RBF` - both boards in one core |
 
 Expansion audio was tested on an original N8 (all of it plays) and one
 clone, whose board only passes part of it (low tones yes, higher tones no).
