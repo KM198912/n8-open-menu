@@ -5,7 +5,7 @@ screen (151 mappers), and where n8-open stands on each. Our RBF number
 is 100 + mapper, in `/EDFC/MAPS/`. Names are filled in where they are
 well known; `-` = still to look up (NESdev wiki).
 
-n8-open: 19 of 151 have a core (see the status column).
+n8-open: 20 of 151 have a core (see the status column).
 
 | Mapper | Name | Status | RBF | Tested with |
 |---:|---|---|---|---|
@@ -25,11 +25,11 @@ n8-open: 19 of 151 have a core (see the status column).
 | 16 | Bandai FCG | open | - | - |
 | 18 | Jaleco SS88006 | open | - | - |
 | 19 | Namco 163 | open | - | - |
-| 21 | VRC4a / VRC4c | done (hardware test open) | `121.RBF` | - |
-| 22 | VRC2a | done (hardware test open) | `122.RBF` | - |
-| 23 | VRC2b / VRC4e/f | done (hardware test open) | `123.RBF` | - |
+| 21 | VRC4a / VRC4c | done | `121.RBF` | Wai Wai World 2 |
+| 22 | VRC2a | done | `122.RBF` | TwinBee 3 |
+| 23 | VRC2b / VRC4e/f | done | `123.RBF` | Tiny Toon Adventures (J) (iNES 1.0 header: the second address pair) |
 | 24 | VRC6a | done (incl. audio) | `124.RBF` | Akumajou Densetsu |
-| 25 | VRC4b/d / VRC2c | done (hardware test open) | `125.RBF` | - |
+| 25 | VRC4b/d / VRC2c | done | `125.RBF` | Gradius II (IRQ, PAL correction) |
 | 26 | VRC6b | done | `126.RBF` | Mouryou Senki Madara |
 | 28 | Action 53 | open | - | - |
 | 30 | UNROM 512 | open | - | - |
@@ -57,7 +57,7 @@ n8-open: 19 of 151 have a core (see the status column).
 | 66 | GxROM | done | `166.RBF` | Super Mario Bros. / Duck Hunt |
 | 67 | Sunsoft-3 | open | - | - |
 | 68 | Sunsoft-4 | open | - | - |
-| 69 | Sunsoft FME-7 / 5B | open | - | - |
+| 69 | Sunsoft FME-7 | done (no 5B audio) | `169.RBF` | Batman: Return of the Joker |
 | 70 | - | open | - | - |
 | 71 | Camerica / Codemasters | done | `171.RBF` | Micro Machines, Fire Hawk |
 | 72 | - | open | - | - |

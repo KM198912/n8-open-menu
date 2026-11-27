@@ -16,6 +16,7 @@ set_global_assignment -name VERILOG_FILE ../nrom/map_mmc5.v
 set_global_assignment -name VERILOG_FILE ../nrom/map_mmc2.v
 set_global_assignment -name VERILOG_FILE ../nrom/map_vrc4.v
 set_global_assignment -name VERILOG_FILE ../nrom/vrc_irq.v
+set_global_assignment -name VERILOG_FILE ../nrom/map_fme7.v
 set_global_assignment -name VERILOG_FILE ../nrom/mmc5_snd.v
 set_global_assignment -name VERILOG_FILE ../nrom/map_simple.v
 set_global_assignment -name VERILOG_FILE ../nrom/map_vrc6.v

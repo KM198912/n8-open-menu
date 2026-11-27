@@ -19,5 +19,6 @@
 25  125     # VRC2c/VRC4b/VRC4d (cores/nrom, revision n8_vrc25)
 26  126     # VRC6b (cores/nrom, revision n8_vrc6b)
 66  166     # GxROM (cores/nrom, revision n8_gxrom)
+69  169     # Sunsoft FME-7 (cores/nrom, revision n8_fme7)
 71  171     # Camerica / Codemasters (cores/nrom, revision n8_camerica)
 254 120     # FDS (cores/nrom, revision n8_fds; MAPROUT entry $FE = FDS)

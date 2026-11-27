@@ -19,6 +19,7 @@ revision sets the `MAPPER` parameter and becomes its own RBF:
 | 25 VRC2c/4b/4d | `n8_vrc25`| `map_vrc4.v` | `/EDFC/MAPS/125.RBF` |
 | 26 VRC6b    | `n8_vrc6b`| `map_vrc6.v` | `/EDFC/MAPS/126.RBF` |
 | 66 GxROM    | `n8_gxrom`| `map_simple.v` | `/EDFC/MAPS/166.RBF` |
+| 69 FME-7    | `n8_fme7` | `map_fme7.v` | `/EDFC/MAPS/169.RBF`   |
 | 71 Camerica | `n8_camerica` | `map_simple.v` | `/EDFC/MAPS/171.RBF` |
 | 11 Color Dreams | `n8_cdream` | `map_simple.v` | `/EDFC/MAPS/111.RBF` |
 | 34 BNROM / NINA-001 | `n8_m34` | `map_simple.v` | `/EDFC/MAPS/134.RBF` |

@@ -94,7 +94,25 @@
 
 ## Done
 
-- **Konami VRC2 / VRC4: mappers 21, 22, 23, 25** (2026-11-27, simulation):
+- **Sunsoft FME-7 (mapper 69)** (2026-11-27; hardware: Batman: Return of
+  the Joker - IRQ split with the PAL correction; 5B audio not yet):
+  `cores/nrom/map_fme7.v`, revision `n8_fme7` -> `169.RBF`. From the wiki:
+  command `$8000` / parameter `$A000`; `$0-$7` CHR 1 KB, `$8` `$6000`
+  (RAM enable / RAM-ROM select / ROM bank; selected-but-disabled RAM =
+  open bus), `$9-$B` 8 KB PRG (6 bits), `$C` mirroring, `$D` IRQ control
+  (any write acknowledges), `$E/$F` 16-bit down counter, IRQ on $0000 ->
+  $FFFF. Decisions: the counter keeps counting after the wrap, power-on all
+  0, 8 KB PRG RAM (bank bits ignored). NTSC-on-PAL correction like the FDS
+  timer (vblank hold, 16/15 while rendering). `tb_fme7` 51 checks (NTSC
+  split lines 31 / 133, PAL with fix 30 / 132), 12 mutations caught (the
+  `$6000` 6-bit one after testing with bit 5 set). Two testbench sequence
+  errors found on the way (counter still running while set; a measurement
+  right after a PPU restart). Next: Sunsoft 5B audio (Gimmick!).
+
+- **Konami VRC2 / VRC4: mappers 21, 22, 23, 25** (2026-11-27; hardware:
+  Wai Wai World 2 (21), TwinBee 3 (22, the CHR shift), Tiny Toon
+  Adventures (J) (23, iNES 1.0 header -> VRC4e on the second address
+  pair), Gradius II (25, IRQ with the PAL correction)):
   `cores/nrom/map_vrc4.v`, revisions `n8_vrc21/22/23/25` -> `121/122/123/
   125.RBF`. The VRC IRQ moved from `map_vrc6.v` into the shared
   `vrc_irq.v` (incl. the PAL correction; `tb_vrc6` unchanged 77/77 for both
@@ -105,9 +123,10 @@
   CHR >> 1, no IRQ). Decisions: 8 KB PRG RAM always on (the VRC2 `$6000`
   latch read-back of Contra (J) / Ganbare Goemon 2 works through it), the
   VRC2a shift on all eight CHR registers. `tb_vrc4` 47 (21/23/25) / 36
-  (22) checks, 14 mutations caught. Hardware test open: TMNT (J) / Gradius
-  2 (J) (25), Wai Wai World 2 (21), Tiny Toon Adventures (J) / Contra (J)
-  (23), TwinBee 3 (22).
+  (22) checks, 14 mutations caught. Note: the wiki's game list names
+  "TMNT (J)" as VRC4d, but the Japanese Gekikame Ninja Den dump is MMC1
+  (NES 2.0 header) - check ROM INFO, not the list. Not tested: the VRC2
+  `$6000` latch read-back (Contra (J) / Ganbare Goemon 2).
 
 - **Mappers 11 (Color Dreams) + 34 (BNROM / NINA-001)** (2026-11-27;
   hardware: Crystal Mines (11), Deadly Towers (34 BNROM) and Impossible
@@ -320,7 +339,8 @@
   Akumajou Densetsu's VRC6 bass comes through - a limit of that clone's
   board, not of the core. VRC6b (`126.RBF`, 2026-11-27): Mouryou Senki
   Madara on hardware - intro, town, battle (picture and play; audio only
-  as far as the clone passes it).
+  as far as the clone passes it). After the IRQ moved into `vrc_irq.v`
+  (VRC2/VRC4 work): Madara still runs.
 - **NTSC games on PAL consoles** (2026-11-25): menu `src/region.s`
   measures the console (15-cycle loop between vblank flags: NTSC ~1985,
   PAL ~2217, Dendy ~2364 passes) and the game's region (NES 2.0 byte 12,

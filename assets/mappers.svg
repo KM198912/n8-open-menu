@@ -139,7 +139,7 @@
 <text x="119.5" y="108.5" font-size="13" text-anchor="middle" dominant-baseline="central" fill="#141414">67</text>
 <rect x="136.5" y="96.5" width="34" height="24" fill="#F2CC4C" stroke="#969696"/>
 <text x="153.5" y="108.5" font-size="13" text-anchor="middle" dominant-baseline="central" fill="#141414">68</text>
-<rect x="170.5" y="96.5" width="34" height="24" fill="#F2CC4C" stroke="#969696"/>
+<rect x="170.5" y="96.5" width="34" height="24" fill="#58C478" stroke="#969696"/>
 <text x="187.5" y="108.5" font-size="13" text-anchor="middle" dominant-baseline="central" fill="#141414">69</text>
 <rect x="204.5" y="96.5" width="34" height="24" fill="#F2CC4C" stroke="#969696"/>
 <text x="221.5" y="108.5" font-size="13" text-anchor="middle" dominant-baseline="central" fill="#141414">70</text>
@@ -514,9 +514,9 @@
 <rect x="510.5" y="360.5" width="34" height="24" fill="#FFFFFF" stroke="#969696"/>
 <text x="527.5" y="372.5" font-size="13" text-anchor="middle" dominant-baseline="central" fill="#141414">255</text>
 <rect x="4.5" y="390.5" width="246" height="22" fill="#58C478" stroke="#969696"/>
-<text x="12" y="401.5" font-size="14" dominant-baseline="central" fill="#141414">n8-open core: 19</text>
+<text x="12" y="401.5" font-size="14" dominant-baseline="central" fill="#141414">n8-open core: 20</text>
 <rect x="4.5" y="416.5" width="246" height="22" fill="#F2CC4C" stroke="#969696"/>
-<text x="12" y="427.5" font-size="14" dominant-baseline="central" fill="#141414">original firmware only: 132</text>
+<text x="12" y="427.5" font-size="14" dominant-baseline="central" fill="#141414">original firmware only: 131</text>
 <rect x="4.5" y="442.5" width="246" height="22" fill="#FFFFFF" stroke="#969696"/>
 <text x="12" y="453.5" font-size="14" dominant-baseline="central" fill="#141414">neither: 105</text>
 <rect x="256" y="390" width="285" height="78" fill="#20242C"/>

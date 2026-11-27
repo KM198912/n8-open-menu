@@ -41,6 +41,7 @@ Generated from `cores/cores.txt` and `docs/mappers.md` by
 | VRC2 / VRC4 (21, 22, 23, 25) | `121.RBF`, `122.RBF`, `123.RBF`, `125.RBF` - banking, IRQ, both address wirings per mapper |
 | VRC6 (24, 26) | `124.RBF`, `126.RBF` - banking, IRQ, audio (2 pulses + saw on `cpu_exp`) |
 | GxROM (66) | `166.RBF` |
+| Sunsoft FME-7 (69) | `169.RBF` - banking, CPU-cycle IRQ (with the NTSC-on-PAL correction); no 5B audio yet |
 | Camerica / Codemasters (71) | `171.RBF` - incl. Fire Hawk's one-screen mirroring |
 | Color Dreams (11) | `111.RBF` |
 | BNROM / NINA-001 (34) | `134.RBF` - both boards in one core |

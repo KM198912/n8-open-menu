@@ -2,7 +2,7 @@
 # n8-open: run the core testbenches with Icarus Verilog (from WSL)
 set -e
 cd "$(dirname "$0")"
-SRC="../nrom/top.v ../nrom/osmap.v ../nrom/map_nrom.v ../nrom/map_mmc1.v ../nrom/map_mmc3.v ../nrom/map_mmc5.v ../nrom/map_simple.v ../nrom/map_vrc6.v ../nrom/map_fds.v ../nrom/aud_dac.v ../nrom/fds_snd.v ../nrom/mmc5_snd.v ../nrom/map_mmc2.v ../nrom/map_vrc4.v ../nrom/vrc_irq.v"
+SRC="../nrom/top.v ../nrom/osmap.v ../nrom/map_nrom.v ../nrom/map_mmc1.v ../nrom/map_mmc3.v ../nrom/map_mmc5.v ../nrom/map_simple.v ../nrom/map_vrc6.v ../nrom/map_fds.v ../nrom/aud_dac.v ../nrom/fds_snd.v ../nrom/mmc5_snd.v ../nrom/map_mmc2.v ../nrom/map_vrc4.v ../nrom/vrc_irq.v ../nrom/map_fme7.v"
 for tb in tb_mmc1 tb_mmc3 tb_mmc5; do
     echo "== $tb"
     iverilog -g2005 -o $tb $tb.v $SRC
@@ -28,6 +28,9 @@ for m in 9 10; do
     iverilog -g2005 -Ptb_mmc2.M=$m -o tb_mmc2 tb_mmc2.v $SRC
     vvp -n tb_mmc2 | grep -v finish
 done
+echo "== tb_fme7"
+iverilog -g2005 -o tb_fme7 tb_fme7.v $SRC
+vvp -n tb_fme7 | grep -v finish
 echo "== tb_fds"
 iverilog -g2005 -o tb_fds tb_fds.v $SRC
 vvp -n tb_fds | grep -v finish
