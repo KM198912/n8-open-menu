@@ -15,10 +15,13 @@ SIDE = 65500
 #   $E1CE LDX $4031 -> JSR $5700 (LDX <current disk byte>)
 #   $E1D1 STA $4024 -> JSR $5704 (STA <next byte to write>)
 #   $E729 JSR $E7A3 -> JSR $5708 (end of a block write: the flush byte)
+#   $E445 JSR $E6E3 -> JSR $5720 (disk check: the wanted ID to the core)
 BIOS_PATCHES = (
     (0x01CE, bytes.fromhex("AE3140 8D2440"), bytes.fromhex("200057 200457")),
     (0x0729, bytes.fromhex("20A3E7"), bytes.fromhex("200857")),
+    (0x0445, bytes.fromhex("20E3E6"), bytes.fromhex("202057")),
 )
+ID_OFF, ID_LEN = 0x0F, 10          # block 1 bytes the BIOS's check compares
 
 
 def sides(data):
@@ -29,6 +32,12 @@ def sides(data):
     if n == 0 or data[0] != 0x01:
         raise ValueError("not an FDS image")
     return [bytes(data[i * SIDE:(i + 1) * SIDE]) for i in range(n)]
+
+
+def side_id(side):
+    """The 10 bytes of block 1 the BIOS compares with a game's wanted ID
+    (manufacturer, name, type, version, side, disk number, ...)."""
+    return bytes(side[ID_OFF:ID_OFF + ID_LEN])
 
 
 def block_table(side):

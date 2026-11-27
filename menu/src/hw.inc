@@ -42,6 +42,8 @@ FPGA_FDS_THI   = $92    ; bits 9:8 (= side)
 FPGA_FDS_TDAT  = $93    ; entry: low byte, then high byte
 FPGA_FDS_SIDE  = $94    ; bits 1:0 side, bit 7 = no disk
 FPGA_FDS_NSIDES = $95   ; sides loaded (1-4), for the side swap
+FPGA_FDS_IDA   = $96    ; side ID address: bits 5:4 side, 3:0 byte
+FPGA_FDS_IDD   = $97    ; side ID data (address advances)
 
 SECBUF      = $0400     ; 512-byte sector buffer
 BUF2        = $0600     ; second 512-byte buffer (auto-read probe)

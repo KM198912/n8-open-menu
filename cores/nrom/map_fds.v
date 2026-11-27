@@ -40,6 +40,16 @@
 // the CRC bit and the drive sends the CRC in its place). The core must not
 // store it either - it would lengthen the block (dropping the blocks after
 // it: Zelda II's save failed with ERR.24) and overwrite the next block.
+// The fourth patch serves the automatic side swap: the BIOS's disk check
+// ($E445: compares 10 bytes of block 1 with the ID the game passes in
+// ($00),Y; $FF = any) is entered through $E445 JSR $E6E3 -> JSR $5720, a
+// second stub that hands the wanted ID to the core before the drive starts:
+//   $5720  A0 09      LDY #9
+//   $5722  B1 00      LDA ($00),Y
+//   $5724  99 10 57   STA $5710,Y     (the core takes byte Y)
+//   $5727  88         DEY
+//   $5728  10 F8      BPL $5722
+//   $572A  4C E3 E6   JMP $E6E3      (the BIOS's own start)
 // Everything else - block headers, file selection, the license check, all
 // register accesses - is the BIOS's own code. Programs that read $4031
 // themselves instead of through the BIOS get $00 (not supported).
@@ -65,7 +75,8 @@
 //   $4032  R     bit 0 no disk, bit 1 not ready, bit 2 write protected
 //                (= no disk); bits 7:3 = $40
 //   $4033  R     $80 (battery good)
-// Not implemented yet: sound ($4040-$4097), the DRAM refresh watchdog.
+// Sound ($4040-$4097): fds_snd.v, out on cpu_exp through aud_dac.v (gain
+// $89 like VRC6). Not implemented: the DRAM refresh watchdog.
 //
 // Disk timing: one byte every 149 1/3 CPU cycles (1792 master clocks). The
 // head runs from the start of the side while the motor is on and transfer
@@ -87,6 +98,9 @@
 //   $93  data: low byte, then high byte (then the address advances)
 //   $94  bits 1:0 the inserted side, bit 7 = no disk inserted
 //   $95  number of sides loaded (1-4), for the side swap
+//   $96  ID address: bits 5:4 side, bits 3:0 byte (0-9; 10-15 are skipped)
+//   $97  ID data (then the address advances): block 1 bytes $0F-$18 of
+//        each side, what the BIOS compares with the game's wanted ID
 //
 // Side swap (manual): the core reads pad 1 along with the game - after a
 // $4016 strobe, the first 8 $4016 reads carry A, B, Select, Start, Up,
@@ -96,6 +110,21 @@
 // the next side is inserted (after the last: side A). Once per press: both
 // buttons have to be released before the next swap. Works only while the
 // game reads the pad (games do every frame, also on "change side" screens).
+//
+// Side swap (automatic), two parts:
+// 1. Eject: a "change side" screen is the game's own loop waiting for the
+//    disk to go (Zelda II: LDA $4032 / LSR / BCS once per frame, no BIOS
+//    call). The core counts $4032 reads made by game code - the cycle
+//    before the data read is the instruction's last operand fetch, outside
+//    $E000-$FFFF for game code, inside for the BIOS. AUTO_POLLS such reads,
+//    each within POLL_GAP cycles of the previous one: eject as in the manual
+//    swap, then the next side. Armed only by a BIOS disk check ($E445) since
+//    the last automatic eject: a game that only checks every frame that the
+//    disk is still there gets at most one eject, not one per second.
+// 2. Side by ID: at every BIOS disk check the core compares the wanted ID
+//    with each loaded side's; if the inserted side does not match and
+//    another one does, that one goes in at once (before the BIOS reads
+//    block 1). Covers what "next side" gets wrong (4 sides, 2 disks).
 //
 // NTSC game on a PAL console (map_cfg[6], set by the menu - every FDS game
 // is NTSC): the timer counts CPU cycles from the game's NMI. As in the VRC6
@@ -129,7 +158,9 @@ module map_fds (
     output         ciram_sel,
     output         irq,
     output reg [7:0] cpu_do,
-    output         cpu_oe
+    output         cpu_oe,
+    input  [7:0]   aud_gain,     // $89: 128 = 1.0
+    output         aud           // sigma-delta audio (cpu_exp)
 );
 
     // byte times; parameters only so that the testbench can shorten them
@@ -138,6 +169,8 @@ module map_fds (
     localparam SIDE_END = 16'd65500;
     parameter  SWAP_HOLD  = 21'd1600000;   // CPU cycles
     parameter  SWAP_EJECT = 21'd1790000;
+    parameter  AUTO_POLLS = 7'd60;         // game $4032 reads before the eject
+    parameter  POLL_GAP   = 17'd100000;    // max cycles between two of them
 
     // ---------------------------------------------------------------- decoding
     wire [15:0] a16 = { ~cpu_ce, cpu_addr };
@@ -147,6 +180,8 @@ module map_fds (
     wire reg_w    = lo & (cpu_addr[14:4] == 11'h402);             // $4020-$402F
     wire reg_r    = lo & (cpu_addr[14:2] == 13'h100C);            // $4030-$4033
     wire stub     = lo & (cpu_addr[14:4] == 11'h570);             // $5700-$570F
+    wire idw      = lo & (cpu_addr[14:4] == 11'h571);             // $5710-$571F
+    wire stub2    = lo & (cpu_addr[14:4] == 11'h572);             // $5720-$572F
     wire rwin     = lo & (cpu_addr[14:10] == 5'b10110);           // $5800-$5BFF
     wire wwin     = lo & (cpu_addr[14:10] == 5'b10111);           // $5C00-$5FFF
     wire port     = lo & (cpu_addr[14:9] == 6'b100010);           // $4400-$45FF
@@ -173,6 +208,17 @@ module map_fds (
     reg        sw_arm  = 1'b1;       // released since the last swap
     reg        eject   = 1'b0;
     reg [20:0] ej_cnt  = 21'd0;
+    // automatic swap: side IDs ($96/$97), game polls of $4032
+    reg [7:0]  id0 [0:9];
+    reg [7:0]  id1 [0:9];
+    reg [7:0]  id2 [0:9];
+    reg [7:0]  id3 [0:9];
+    reg [5:0]  id_p    = 6'd0;
+    reg [3:0]  id_m    = 4'd0;       // sides matching the wanted ID so far
+    reg        prev_bios = 1'b0;     // last cycle's address in $E000-$FFFF
+    reg [6:0]  ap_cnt  = 7'd0;
+    reg [16:0] ap_gap  = 17'd0;
+    reg        ap_arm  = 1'b0;       // a BIOS disk check since the last auto eject
 
     // head
     localparam ST_STOP = 3'd0, ST_LEAD = 3'd1, ST_BLK = 3'd2, ST_CRC = 3'd3,
@@ -259,6 +305,16 @@ module map_fds (
     // is this cycle a transfer acknowledge? ($4031 / read window, $4024 / write window)
     wire       ack_r   = rd  & ((reg_r & cpu_addr[1:0] == 2'd1) | rwin);
     wire       ack_w   = ~rd & ((reg_w & rn == 4'h4) | wwin);
+    // ID check: which loaded sides match the byte written to $5710+Y
+    wire [3:0] id_y    = cpu_addr[3:0];
+    wire       id_ok   = idw & ~rd & (id_y <= 4'd9);
+    wire       id_any  = (cpu_dat == 8'hFF);
+    wire [3:0] id_set  = { nsides > 3'd3, nsides > 3'd2, nsides > 3'd1, 1'b1 };
+    wire [3:0] id_now  = id_set & { id_any | (cpu_dat == id3[id_y]), id_any | (cpu_dat == id2[id_y]),
+                                    id_any | (cpu_dat == id1[id_y]), id_any | (cpu_dat == id0[id_y]) };
+    wire [3:0] id_fin  = id_m & id_now;                         // with byte 0, the last
+    wire [1:0] id_pick = id_fin[0] ? 2'd0 : id_fin[1] ? 2'd1 : id_fin[2] ? 2'd2 : 2'd3;
+    wire       g_poll  = reg_r & rd & (cpu_addr[1:0] == 2'd2) & ~prev_bios;   // game reads $4032
 
     // ---------------------------------------------------------------- CPU side, falling M2
     always @(negedge mclk) begin
@@ -276,6 +332,7 @@ module map_fds (
             blk <= 8'd0;   bstart <= 16'd0;
             pad_stb <= 1'b0;  pad_n <= 4'd8;  pad_btn <= 8'd0;
             sw_cnt <= 21'd0;  sw_arm <= 1'b1;  eject <= 1'b0;  ej_cnt <= 21'd0;
+            id_m <= 4'd0;  ap_cnt <= 7'd0;  ap_gap <= 17'd0;  ap_arm <= 1'b0;  prev_bios <= 1'b0;
             if (port & ~rd & cpu_addr[1:0] == 2'd1) begin
                 case (index)
                     8'h91: begin m_addr[7:0] <= cpu_dat;      m_hi <= 1'b0; end
@@ -288,6 +345,16 @@ module map_fds (
                            end
                     8'h94: begin side <= cpu_dat[1:0];  nodisk <= cpu_dat[7]; end
                     8'h95: nsides <= cpu_dat[2:0];
+                    8'h96: id_p <= cpu_dat[5:0];
+                    8'h97: begin
+                               if (id_p[3:0] <= 4'd9) case (id_p[5:4])
+                                   2'd0: id0[id_p[3:0]] <= cpu_dat;
+                                   2'd1: id1[id_p[3:0]] <= cpu_dat;
+                                   2'd2: id2[id_p[3:0]] <= cpu_dat;
+                                   default: id3[id_p[3:0]] <= cpu_dat;
+                               endcase
+                               id_p <= id_p + 6'd1;
+                           end
                     default: ;
                 endcase
             end
@@ -323,6 +390,38 @@ module map_fds (
                     side  <= side_nx;
                 end else
                     ej_cnt <= ej_cnt + 21'd1;
+            end
+
+            // ---- automatic swap 1: the game waits for an eject
+            prev_bios <= bios;
+            if (g_poll && ap_arm && !no_disk) begin
+                ap_gap <= 17'd0;
+                if (ap_cnt == AUTO_POLLS) begin
+                    ap_arm <= 1'b0;
+                    ap_cnt <= 7'd0;
+                    eject  <= 1'b1;
+                    ej_cnt <= 21'd0;
+                end else
+                    ap_cnt <= ap_cnt + 7'd1;
+            end else if (ap_gap == POLL_GAP)
+                ap_cnt <= 7'd0;                  // not a waiting loop
+            else
+                ap_gap <= ap_gap + 17'd1;
+
+            // ---- automatic swap 2: the BIOS's disk check names the side
+            if (id_ok) begin
+                if (id_y == 4'd9)
+                    id_m <= id_now;              // the stub writes byte 9 first
+                else
+                    id_m <= id_m & id_now;
+                // ... and byte 0 last; with no disk in, the BIOS stops
+                // before reading (and a check cannot happen then anyway)
+                if (id_y == 4'd0 && !no_disk) begin
+                    ap_arm <= 1'b1;
+                    ap_cnt <= 7'd0;
+                    if (!id_fin[side] && id_fin != 4'd0)
+                        side <= id_pick;
+                end
             end
 
             // ---- frame position (PAL correction)
@@ -496,9 +595,39 @@ module map_fds (
         end
     end
 
+    // ---------------------------------------------------------------- sound
+    wire [7:0]  snd_do;
+    wire        snd_oe;
+    wire [10:0] snd_level;
+    fds_snd snd (
+        .mclk(mclk), .rst(rst), .cpu_addr(cpu_addr), .cpu_ce(cpu_ce), .cpu_rw(cpu_rw),
+        .cpu_dat(cpu_dat), .rd_dat(snd_do), .rd_oe(snd_oe), .level(snd_level)
+    );
+    aud_dac dac (.clk(clk), .level(snd_level), .gain(aud_gain), .aud(aud));
+
     // ---------------------------------------------------------------- reads the core answers
     wire [15:0] w_now = wr_off;
     always @* begin
+        if (snd_oe)
+            cpu_do = snd_do;
+        else if (stub2)
+        case (cpu_addr[3:0])
+            4'h0: cpu_do = 8'hA0;                                    // LDY #9
+            4'h1: cpu_do = 8'h09;
+            4'h2: cpu_do = 8'hB1;                                    // LDA ($00),Y
+            4'h3: cpu_do = 8'h00;
+            4'h4: cpu_do = 8'h99;                                    // STA $5710,Y
+            4'h5: cpu_do = 8'h10;
+            4'h6: cpu_do = 8'h57;
+            4'h7: cpu_do = 8'h88;                                    // DEY
+            4'h8: cpu_do = 8'h10;                                    // BPL $5722
+            4'h9: cpu_do = 8'hF8;
+            4'hA: cpu_do = 8'h4C;                                    // JMP $E6E3
+            4'hB: cpu_do = 8'hE3;
+            4'hC: cpu_do = 8'hE6;
+            default: cpu_do = 8'hEA;
+        endcase
+        else
         case ({ stub, cpu_addr[3:0] })
             5'h10: cpu_do = 8'hAE;                                   // LDX abs
             5'h11: cpu_do = rd_off[7:0];
@@ -524,7 +653,7 @@ module map_fds (
             endcase
         endcase
     end
-    assign cpu_oe = ~rst & m2 & cpu_rw & (reg_r | stub);
+    assign cpu_oe = ~rst & m2 & cpu_rw & (reg_r | stub | stub2 | snd_oe);
 
     // ---------------------------------------------------------------- memory map
     wire [5:0] ram_pg = a16[15:10] - 6'h18;                  // $6000 -> 0

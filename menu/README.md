@@ -8,8 +8,14 @@ from `docs/hw-interface.md`. The cartridge's BIOS (in its flash) loads it from
 
 - Browse the SD card (FAT32, MBR or superfloppy, SDSC/SDHC): folders first,
   then files alphabetically (case-insensitive), long file names.
-  Up/Down (auto-repeat), Left/Right page, A/Start open, B back.
-- Select on a ROM: info screen (mapper, PRG/CHR sizes, mirroring, battery,
+  Up/Down (auto-repeat), Left/Right page, A open, B back. Up to 127
+  entries per folder. `/EDFC` (firmware, cores, BIOS, saves) is not listed.
+- Select on a ROM: the file menu, a box over the list (Up/Down, A confirms,
+  B closes). `SELECT + LOAD` / `SELECT ONLY` store the game as the last
+  game (and start it / go back to the list); `START: <name>` above the
+  status line shows it, also after power-off. Start loads it from any
+  folder (B then leads back to where you were); if the file is no longer
+  there: `ERROR 4C`. Details: `src/lastgame.s`. `ROM INFO`: info screen (mapper, PRG/CHR sizes, mirroring, battery,
   trainer, iNES/NES 2.0, whether a core exists); for `.fds` images the
   header, sides, game code/version, whether `DISKSYS.ROM` is there and the
   FDS core.
@@ -26,11 +32,13 @@ from `docs/hw-interface.md`. The cartridge's BIOS (in its flash) loads it from
   ("SAVING..."). Details and safety checks: `src/save.s`.
 - FDS disk images (`.fds`, with or without the 16-byte header, up to 4
   sides): need the user's own BIOS dump as `/EDFC/DISKSYS.ROM` (8 KB) and
-  the FDS core (`MAPROUT.BIN` entry `$FE`). The menu patches two
+  the FDS core (`MAPROUT.BIN` entry `$FE`). The menu patches four
   instructions of the BIOS (checked against the original bytes), copies
-  the sides and block tables for the core and starts the BIOS; side A is
-  inserted. Side swap: hold Select + Down for about a second (the disk is
-  ejected for a second, then the next side goes in). Saves: what the game
+  the sides, block tables and side IDs for the core and starts the BIOS;
+  side A is inserted. Side swap: automatic - on a "change side" screen the
+  disk is ejected after about a second and the next side goes in; when the
+  game asks the BIOS for a particular side, the core inserts that one.
+  Manual fallback: hold Select + Down for about a second. Saves: what the game
   writes to side A goes back into the `.fds` file at the next menu start
   ("SAVING...", a few seconds; only changed sectors are written). Writes to
   other sides are lost at power-off (the battery RAM holds one side).

@@ -162,8 +162,15 @@ def fds_hand_over(board, cpu, frames, call=None, pokes=()):
     port = board.fds_port
     words, lo, addr_ok = [], None, port[:2] == [(0x91, 0), (0x92, 0)]
     side_reg = None
+    ids, id_p = [[0] * 10 for _ in range(4)], None
     for idx, v in port[2:]:
-        if idx == 0x93:
+        if idx == 0x96:
+            id_p = v & 0x3F
+        elif idx == 0x97 and id_p is not None:
+            if id_p & 15 <= 9:
+                ids[id_p >> 4][id_p & 15] = v
+            id_p = (id_p + 1) & 0x3F
+        elif idx == 0x93:
             if lo is None:
                 lo = v
             else:
@@ -180,13 +187,17 @@ def fds_hand_over(board, cpu, frames, call=None, pokes=()):
     out.append("  tables equal to fdsdisk.block_table of the sides in SRAM: %s" % (
         "yes" if all(tables[i] == ref[i] for i in used) else "NO"))
     bios_ok = (board.prg[0x81CE:0x81D4] == bytes.fromhex("200057200457") and
-               board.prg[0x8729:0x872C] == bytes.fromhex("200857"))
+               board.prg[0x8729:0x872C] == bytes.fromhex("200857") and
+               board.prg[0x8445:0x8448] == bytes.fromhex("202057"))
     out.append("  BIOS at $08000 patched: %s" % ("yes" if bios_ok else "NO"))
+    ref_ids = [list(fds_boot.fdsdisk.side_id(fds_boot.side_bytes(board.prg, board.sram, i))) for i in range(4)]
+    out.append("  side IDs sent ($96/$97) equal to block 1 $0F-$18 of the sides: %s" % (
+        "yes" if id_p is not None and all(ids[i] == ref_ids[i] for i in used) else "NO"))
     for i, t in enumerate(tables):
         if t and t[0] != 0xFFFF:
             out.append("  side %d: %d blocks, end %d" % (i, len(t) - 2, t[-2]))
     fb = fds_boot.FDSBoard(board.prg, tables, side=(side_reg or 0) & 3, ram=board.ram, log=lambda s: None,
-                           sram=board.sram)
+                           sram=board.sram, ids=ids)
     cpu.bus = fb
     cpu.irq_line = fb.irq_line
     frame, next_vblank, game_frame = 0, cpu.cycles + 29780, None

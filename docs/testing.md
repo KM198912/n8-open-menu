@@ -16,7 +16,8 @@ cores/tb/run.sh          (Icarus Verilog 12; on Windows through WSL:
 | `tb_mmc3.v` | MMC3 banking, PRG RAM protect, scanline IRQ with a PPU fetch model (A12 filter, latch 0, BG/sprite table layouts) |
 | `tb_mmc5.v` | MMC5 PRG/CHR/RAM, nametables, fill mode, ExRAM, scanline detection and IRQ from real PPU reads, 8x16 sets, extended attributes; monitors that the data buses are only driven when allowed |
 | `tb_simple.v` | discrete mappers (`-Ptb_simple.M=<mapper>`): UxROM |
-| `tb_fds.v` | FDS: memory map, registers, timer IRQ incl. the PAL correction (Zelda II's split line), BIOS stub, disk stream through the read window (lead-in, blocks, CRC, gaps, end of disk, the BIOS's short reset pulse), overrun -> CRC error bit, a write session with the block table update and the BIOS's flush byte; the lead-in is shortened to 200 byte times (`defparam`), ~15 s per run |
+| `tb_fds_snd.v` | FDS sound against `tools/n8sim/fds_audio.py`, cycle for cycle (`fds_audio.py gen` writes the stimulus, `check` compares): wave, modulation, envelopes, master volume, halts, write protection, reads |
+| `tb_fds.v` | FDS: memory map, registers, timer IRQ incl. the PAL correction (Zelda II's split line), BIOS stub, disk stream through the read window (lead-in, blocks, CRC, gaps, end of disk, the BIOS's short reset pulse), overrun -> CRC error bit, a write session with the block table update and the BIOS's flush byte, the side swap (manual; automatic: game polls vs. BIOS polls, threshold, pause reset, arming, the `$5720` stub, side by ID with wildcards, 2 and 4 sides); the lead-in is shortened to 200 byte times (`defparam`), ~15 s per run |
 
 The testbenches drive real bus cycles (M2 low/high, data hold after the
 falling edge) and, where it matters, a PPU model with per-dot fetches.
@@ -38,7 +39,8 @@ Runs the user's own BIOS dump, patched as the menu patches it
 of `map_fds.v`, from the BIOS reset vector. Prints both nametables (BIOS
 font), the frame the game's code was first reached, the blocks read and
 written, and lost bytes. NTSC only; base cycle counts (slightly
-optimistic). Zelda II (2026-11-26): license screen, all 16 blocks of side
+optimistic). The model has the automatic side swap too (`FDSBoard`:
+`auto_ejects`, `id_swaps`). Zelda II (2026-11-26): license screen, all 16 blocks of side
 A, game code from frame 743, no lost bytes; the BIOS needs 92-105 cycles
 per byte after taking it (+ ~20 to take it) of the 149 available.
 

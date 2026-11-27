@@ -3,17 +3,29 @@
 ## Open
 
 - **Menu: last game / quick start** (like Krikzz's menu; decided 2026-11-26,
-  after FDS): Select on a file opens a popup `ROM INFO` / `SELECT ONLY` /
-  `SELECT + LOAD` (Up/Down, A confirms, B closes); B stays "back", A stays
-  "open". Start loads the stored game from anywhere. Stored in save SRAM
-  page 10 (NOT usable: the BIOS rewrites pages 9-15 at power-on - needs
-  another place, e.g. a file on the SD card): `"N8LG"`, volume ID, directory cluster, file
-  cluster + size, long name; checked before loading (same card, name still
-  in that directory with that cluster/size, else "LAST GAME NOT FOUND"),
-  then the folder is opened with the cursor on it and it starts through
-  the normal path (.nes/.fds, saves, PAL). Status line: `START: <name>`.
-  New `menu/src/lastgame.s`; simulator: store -> power cycle (`--sram`) ->
-  Start, plus the missing-file error.
+  after FDS). Phase 1, the popup, done in simulation 2026-11-27: Select on
+  a file opens a box (`FILE MENU`: `SELECT + LOAD` / `SELECT ONLY` /
+  `ROM INFO`, Krikzz's order; Up/Down, A confirms, B closes - our buttons,
+  not Krikzz's B-select/A-back). Grey box from a second font set made at
+  start-up (plane 1 set), BG palettes 1/2 (highlight yellow), drawn and
+  removed with rendering on. Hardware: works (2026-11-27). Phase 2 done in
+  simulation 2026-11-27 (`menu/src/lastgame.s`): `SELECT ONLY` / `SELECT +
+  LOAD` store the record in the last directory-list slot of save SRAM page
+  8 (`$7FC0`; `MAX_ENTRIES` 128 -> 127): `"N8LG"`, volume ID, folder
+  cluster, file cluster + size, first 23 characters of the long name. Page 8
+  checked against the BIOS dump: only pages 9-15 are written at power-on
+  (`$F080`); the one page-8 select (`$C13E`) is followed by PPU writes
+  only; the full SRAM test at `$C27F` is not part of the normal boot (saves
+  in pages 0/7 survive). Row 27 shows `START: <name>`; Start (no longer
+  "open" like A) pushes the current folder, opens the stored one, finds the
+  entry by cluster + size, puts the cursor on it and starts it through the
+  normal path; not there: error `$4C` LAST GAME NOT FOUND, B leads back.
+  Simulator: store -> power cycle (`--sram`) -> `START:` line -> Start from
+  another folder starts `hello.nes` (PRG checked); `SELECT + LOAD`; file
+  not in the folder -> `4C`; B after an error -> previous folder; a
+  folder with 150 files fills slot 127 and leaves the record intact; no
+  dark frames. Not covered by the simulator: a card with another volume
+  ID (both test images share `12345678`). Hardware test open.
 - **Reset button = restart the game** (accepted as the initial behaviour,
   2026-11-25; power cycle = back to the menu). With the CRC-fixed loader and a
   core with `RET_MENU 1`, reset restarts the game cleanly, also when held for
@@ -49,26 +61,29 @@
   original N8 (VRC6 vs 2A03 pulse per pitch), then a per-chip default + a
   per-chip gain in the menu (Krikzz's "audio balance" is per chip, 0-200%;
   VRC6 needs ~160-200% there on stock/AV-modded Famicoms, r/everdrive 15c8w2v).
+  FDS sounds right by ear at gain 1.0 (Zelda II, 2026-11-27); a measured
+  per-chip calibration is only still open for VRC6.
 - **FDS** (phase 1 = core done in simulation, see Done; BIOS = the user's
   own dump `/EDFC/DISKSYS.ROM`, CRC32 `5E607DCF`, never shipped; the
   original firmware carries Nintendo's BIOS inside `254.RBF`/`OS.BIN`):
   - phase 2, menu: done in simulation (see Done); first hardware test:
     Zelda II. If it misbehaves, suspect CPLD `$09` bit 2 first (set as
-    the clone menu does for FDS, meaning unknown). Manual side swap: done
-    in simulation (see Done); then the automatic one (phase 4).
+    the clone menu does for FDS, meaning unknown). Side swap: manual and
+    automatic, see Done.
   - phase 3, saves: done, Zelda II's save survives power cycles on hardware.
     Only side A is kept: games that save to another side lose that save at
     power-off. Possible later: keep the side the game last wrote to (copy
     it into the save SRAM on the swap), or let the user pick the side.
-  - **phase 4, auto swap - needed before a release**, not a convenience:
-    players won't read a README, sit at "CHANGE SIDE B" for 20 s and think
-    the core is broken. The original firmware, at Zelda II's "CHANGE SIDE
-    B" screen (after creating a player), waits 4-5 s and goes on by
-    itself (seen 2026-11-26) - eject + insert of the side the game asks
-    for (block 1 side/disk numbers vs. what the BIOS checks).
-  - phase 5: FDS audio ($4040-$4097) on `cpu_exp`.
+  - phase 4, auto swap: done, hardware 2026-11-27 (see Done). Open: SMB
+    retest on the auto-swap build (ran fine on the build before). Known
+    limit: a game that polls `$4032` from its own code during normal play
+    gets one eject (short "insert disk" or a reset to the title) - watch
+    for it with every new game.
   - not supported: programs reading `$4031` themselves instead of through
     the BIOS (own loaders, some copy protections) get `$00`.
+- ROM info screen: long file names break at column 31 mid-word
+  ("Super Mario Bros. (Japan).fd" / "s", seen 2026-11-27). Break at a space
+  (or before the extension), or cut with an ellipsis. `menu/src/rominfo.s`.
 - Battery saves, open points: save sizes other than 8 KB (NES 2.0 header
   byte 10; SxROM 16/32 KB, MMC5) are not supported; names over 47 characters
   are cut (list keeps 51); deleted directory slots are not reused; the FAT
@@ -79,6 +94,46 @@
 
 ## Done
 
+- **Menu: `/EDFC` hidden** (2026-11-27, simulation): `dir_load` skips the
+  root's folder with the 8.3 name `EDFC`; everything inside it is found by
+  name (`find_edfc`), so cores, `DISKSYS.ROM`, saves and the info screen's
+  core check are unaffected. Simulator: root list without it, `hello.nes`
+  starts, ROM INFO "SUPPORTED: YES", Zelda II (FDS) starts, a nested
+  `NES/EDFC/` stays visible, last game + Start still work.
+
+- **FDS phase 4: automatic side swap** (2026-11-27; hardware: Zelda II -
+  "CHANGE SIDE B" goes on by itself, the save survives power-off; Dracula
+  II, 2 sides, password game - side changes by itself in game).
+  Found in the simulator first (real BIOS, Zelda II driven through name
+  entry and player select): the game shows "CHANGE SIDE B" without a BIOS
+  call, its own code (`$844F`) polls `$4032` once per frame for "no disk",
+  then (`$8456`) for "inserted", and only then loads through the BIOS. So
+  two parts in `map_fds.v`: (1) eject after 60 `$4032` reads by game code
+  (the operand fetch before the read is outside `$E000-$FFFF`), each
+  within 100000 cycles of the last, then the next side; armed only by a
+  BIOS disk check since the last auto eject. (2) A 4th BIOS patch, `$E445`
+  JSR `$E6E3` -> JSR `$5720`: a core stub copies the game's wanted ID
+  (10 bytes, `$FF` = any) to `$5710-$5719` before the drive starts; the
+  core compares it with every loaded side's block 1 `$0F-$18` (menu ->
+  `$96/$97`, staged at PRG `$0A800`) and inserts the matching side at once
+  if the inserted one does not match (4 sides / 2 disks). `tb_fds` 131
+  checks (32 new), 16 mutations; menu run in `n8sim` (IDs sent = the
+  sides' block 1 bytes, 4 patches); Zelda II in the `fds_boot` model:
+  "CHANGE SIDE B" ~frame 2205, eject 2268, side B 2333, in game ~2860,
+  no button pressed. Select + Down stays as the manual fallback.
+
+- **FDS phase 5: audio** (2026-11-26; hardware 2026-11-27: BIOS logo chime
+  and Zelda II's FDS layer audible, level right by ear, recording clean:
+  peak -14 dBFS, notes in tune, no aliasing):
+  `cores/nrom/fds_snd.v`
+  - wave RAM, wave unit, modulation (the wiki's pitch formula), both
+  envelopes, master volume, 1-pole low-pass ~2.4 kHz; out through the new
+  shared `aud_dac.v` (VRC6 moved to it, `tb_vrc6` unchanged 77/77). Bit
+  meanings where the wiki contradicts itself: Disch's FDS.txt. Reference
+  model `tools/n8sim/fds_audio.py`; `tb_fds_snd` replays 220,295 bus cycles
+  on the core and the model - identical in every cycle (pre-filter level,
+  filtered level, register reads); 16 mutations all caught. Open: `$4083`
+  bit 7 "envelopes 4x faster" (wiki diagram only).
 - **Save records lost at power-off - battery saves too** (2026-11-26):
   the BIOS loads OS.BIN into save SRAM pages 9-15 at every power-on (dump,
   `$F080`), and the save record had lived in page 9 since the MMC5 work.
@@ -199,7 +254,7 @@
   page and pages 1, 2, 7 before the jump (pages 3-6 hold its code). Found
   while chasing the Castlevania status bar (page 7 was full of menu data;
   not the cause there, but games now start as from power-on).
-- Test aids: `test/ab/` (A/B MAPROUT for foreign cores 200+), diagnostic
+- Test aids: an A/B MAPROUT for foreign cores (numbers 200+), diagnostic
   `OS.BIN` build `-D AB_TEST` (no signature check for cores 200+),
   simulator `--no-signature` and RAM report at game start.
 

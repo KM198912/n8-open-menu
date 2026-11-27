@@ -108,7 +108,7 @@ as the **menu-mode core** (the core `OS.BIN` runs under) and stops with
 2026-11-25 after deleting it).
 
 Source: 16 KB BIOS window read with `tools/mk_biosdump.py` + the dump helper
-core (`test/dump/bios16k.bin`; the window appears twice in `$8000-$FFFF`).
+core (the window appears twice in `$8000-$FFFF`).
 Reset vector `$FC40`, NMI/IRQ `$FFCB`. A jump table of BIOS functions sits at
 `$FC1E` (`$FC53, $FC64, $FC77, $FC7F, $FD11, $FD4A, $FD8B, $FDD8, $FE31,
 $FE53, $FE5B, $FF27, $FC87, $FE96, $FF34, $FF0D, $FFA7`).

@@ -107,6 +107,7 @@ old_sel:    .res 1          ; cursor / first visible row before a move
 old_top:    .res 1
 err:        .res 1
 width:      .res 1
+pop_sel:    .res 1          ; popup: highlighted item (0-2)
 
 ; FAT32 writing (fatw.s)
 nfats:      .res 1          ; number of FAT copies
@@ -189,8 +190,12 @@ fp_len:     .res 2
 .segment "RODATA"
 font:
     .incbin "font.chr"
+; BG palette 0: the list (font colour 1); 1 and 2: the popup box (box font:
+; colour 2 = grey background, colour 3 = text: white / yellow = highlighted).
+; Colour 1 stays white in all three, so list text under a box attribute
+; looks unchanged until the box tiles replace it.
 palette:
-    .byte $0F,$30,$10,$00, $0F,$2A,$1A,$00, $0F,$16,$06,$00, $0F,$30,$10,$00
+    .byte $0F,$30,$10,$00, $0F,$30,$00,$30, $0F,$30,$00,$28, $0F,$30,$10,$00
 
 .segment "VECTORS"
     .word nmi, reset, nmi
@@ -301,14 +306,7 @@ reset:
 
 ; ---------------------------------------------------------------- main loop
 main_loop:
-    jsr vwait
-    jsr read_joy
-    lda joy_prev
-    eor #$FF
-    and joy
-    sta joy_new
-    lda joy
-    sta joy_prev
+    jsr poll_joy
 
     ; up/down with auto-repeat
     lda joy_new
@@ -360,9 +358,15 @@ main_loop:
     jsr update_list
     jmp main_loop
 @a: lda joy_new
-    and #BTN_A | BTN_START
-    beq @b
+    and #BTN_A
+    beq @st
     jsr activate
+    jmp main_loop
+@st:
+    lda joy_new
+    and #BTN_START
+    beq @b
+    jsr lg_start            ; the stored game (lastgame.s)
     jmp main_loop
 @b: lda joy_new
     and #BTN_B
@@ -373,9 +377,21 @@ main_loop:
     lda joy_new
     and #BTN_SELECT
     beq @none
-    jsr show_info
+    jsr popup
 @none:
     jmp main_loop
+
+; next frame: joy = buttons held, joy_new = pressed since the last call
+poll_joy:
+    jsr vwait
+    jsr read_joy
+    lda joy_prev
+    eor #$FF
+    and joy
+    sta joy_new
+    lda joy
+    sta joy_prev
+    rts
 
 ; ---------------------------------------------------------------- actions
 cur_up:
@@ -453,7 +469,7 @@ activate:
     ldy #REC_ATTR
     lda (rec),y
     and #$10
-    beq @file
+    beq start_file
     ; enter folder
     lda depth
     cmp #16
@@ -482,7 +498,9 @@ activate:
     jmp redraw
 @deep:
     rts
-@file:
+
+; start the selected file (sel)
+start_file:
     lda #STATUS_ROW         ; "LOADING..." stays on screen while PRG loads;
     ldx #1                  ; the loader turns rendering off (in vblank)
     jsr gotoxy_off          ; before CHR, so the screen changes once, from
@@ -496,20 +514,231 @@ activate:
     jsr menu_gfx
     jmp redraw
 
-; Select: ROM info for the selected file (not for folders)
-show_info:
+; ---------------------------------------------------------------- popup
+; Select on a file: a box over the list (FILE MENU) with SELECT + LOAD,
+; SELECT ONLY, ROM INFO. Up/Down moves the highlight, A confirms, B closes.
+; Drawn and removed with rendering on, a few rows per vblank (no black
+; frame). The box covers columns 8-23, rows 4-19: whole attribute bytes, so
+; palettes 1/2 colour it exactly; each item has its own 2-row band.
+BOX_COL  = 8
+BOX_ROW  = 4
+BOX_W    = 16
+BOX_H    = 16
+BOX_ITEM = 10               ; row of item 0; items 2 rows apart
+BOX_ROWS_PF = 4             ; box rows per vblank (~310 cycles each)
+
+popup:
     lda dcount
     beq @done
     jsr sel_rec
     ldy #REC_ATTR
     lda (rec),y
     and #$10
-    bne @done
+    bne @done               ; folders: no menu
+    lda #0
+    sta pop_sel
+    jsr box_open
+@loop:
+    jsr poll_joy
+    lda joy_new
+    and #BTN_UP
+    beq @dn
+    lda pop_sel
+    beq @loop
+    dec pop_sel
+    jsr box_hl
+    jmp @loop
+@dn:
+    lda joy_new
+    and #BTN_DOWN
+    beq @b
+    lda pop_sel
+    cmp #2
+    beq @loop
+    inc pop_sel
+    jsr box_hl
+    jmp @loop
+@b:
+    lda joy_new
+    and #BTN_B
+    beq @a
+    jmp box_close
+@a:
+    lda joy_new
+    and #BTN_A
+    beq @loop
+    lda pop_sel
+    beq @load
+    cmp #1
+    beq @only
     jsr rom_info
     jsr menu_gfx
     jmp redraw
+@load:
+    jsr lg_store            ; SELECT + LOAD (lastgame.s)
+    jmp start_file
+@only:
+    jsr lg_store            ; SELECT ONLY: store, close, show START: <name>
+    jsr box_close
+    jsr vwait
+    jsr lg_draw
+    jmp fix_scroll
 @done:
     rts
+
+; box attributes for pop_sel, then the box rows
+box_open:
+    jsr vwait
+    jsr box_attr
+    jsr fix_scroll
+    lda #0
+    sta tmp+3               ; box row
+@frame:
+    jsr vwait
+    lda #BOX_ROWS_PF
+    sta tmp+2
+@r: jsr box_row
+    inc tmp+3
+    lda tmp+3
+    cmp #BOX_H
+    beq @end
+    dec tmp+2
+    bne @r
+    jsr fix_scroll
+    jmp @frame
+@end:
+    jmp fix_scroll
+
+; new highlight: the 4 attribute bytes of the item bands, in vblank
+box_hl:
+    jsr vwait
+    jsr box_attr
+    jmp fix_scroll
+
+; attribute bytes of the box (rows 4-19 = attribute rows 1-4, columns 8-23
+; = attribute columns 2-5); quadrants: 1 = box, 2 = highlighted item band
+box_attr:
+    ldx #0                  ; attribute row 1..4 -> X = 0..3
+@row:
+    lda #$55                ; rows 4-7, 16-19: plain box
+    cpx #1
+    bne @r2
+    lda #$55                ; rows 8-11: top half box, bottom half = item 0
+    ldy pop_sel
+    bne @put
+    lda #$A5
+    bne @put
+@r2:
+    cpx #2
+    bne @put
+    lda #$55                ; rows 12-15: top = item 1, bottom = item 2
+    ldy pop_sel
+    cpy #1
+    bne :+
+    lda #$5A
+:   cpy #2
+    bne @put
+    lda #$A5
+@put:
+    sta tmp                 ; 4 bytes at $23C0 + (X + 1) * 8 + 2
+    lda PPUSTATUS
+    lda #$23
+    sta PPUADDR
+    txa
+    asl
+    asl
+    asl
+    clc
+    adc #$C0 + 8 + 2
+    sta PPUADDR
+    lda tmp
+    sta PPUDATA
+    sta PPUDATA
+    sta PPUDATA
+    sta PPUDATA
+    inx
+    cpx #4
+    bne @row
+    rts
+
+; box row tmp+3: 16 tiles of the box font (character + $80)
+box_row:
+    lda tmp+3
+    clc
+    adc #BOX_ROW
+    ldx #BOX_COL
+    jsr gotoxy
+    ldx tmp+3
+    lda box_lo,x
+    sta ptr
+    lda box_hi,x
+    sta ptr+1
+    ldy #0
+@c: lda (ptr),y
+    ora #$80
+    sta PPUDATA
+    iny
+    cpy #BOX_W
+    bne @c
+    rts
+
+; close: list rows under the box drawn again (whole rows, 2 per vblank),
+; then the attributes back to palette 0
+box_close:
+    lda #BOX_ROW - LIST_ROW
+    sta tmp+3
+@frame:
+    jsr vwait
+    ldx #2
+    stx tmp+2
+@r: jsr draw_row
+    inc tmp+3
+    lda tmp+3
+    cmp #BOX_ROW - LIST_ROW + BOX_H
+    beq @attr
+    dec tmp+2
+    bne @r
+    jsr fix_scroll
+    jmp @frame
+@attr:
+    jsr fix_scroll
+    jsr vwait
+    ldx #0
+@a: lda PPUSTATUS
+    lda #$23
+    sta PPUADDR
+    txa
+    asl
+    asl
+    asl
+    clc
+    adc #$C0 + 8 + 2
+    sta PPUADDR
+    lda #0
+    sta PPUDATA
+    sta PPUDATA
+    sta PPUDATA
+    sta PPUDATA
+    inx
+    cpx #4
+    bne @a
+    jmp fix_scroll
+
+; box contents, one 16-character row each (BOX_ITEM = row 10 -> box row 6)
+box_lo:
+    .byte <bx_blank, <bx_title, <bx_line, <bx_blank, <bx_blank, <bx_blank
+    .byte <bx_load, <bx_blank, <bx_only, <bx_blank, <bx_info, <bx_blank
+    .byte <bx_blank, <bx_blank, <bx_blank, <bx_blank
+box_hi:
+    .byte >bx_blank, >bx_title, >bx_line, >bx_blank, >bx_blank, >bx_blank
+    .byte >bx_load, >bx_blank, >bx_only, >bx_blank, >bx_info, >bx_blank
+    .byte >bx_blank, >bx_blank, >bx_blank, >bx_blank
+bx_blank: .byte "                "
+bx_title: .byte "   FILE MENU    "
+bx_line:  .byte "----------------"
+bx_load:  .byte " SELECT + LOAD  "
+bx_only:  .byte "  SELECT ONLY   "
+bx_info:  .byte "    ROM INFO    "
 
 go_back:
     lda depth
@@ -629,6 +858,7 @@ redraw:
     sta PPUMASK
     jsr draw_list
     jsr draw_status
+    jsr lg_draw
     jmp show
 
 show:
@@ -718,7 +948,7 @@ draw_status:
     PRINT "(EMPTY)  B:BACK               "
     rts
 @help:
-    PRINT "A:OPEN B:BACK SEL:INFO L/R:PG "
+    PRINT "A:OPEN B:BACK SEL:MENU L/R:PG "
     rts
 @err:
     PRINT "ERROR "
@@ -768,10 +998,10 @@ draw_status:
 
 err_codes:
     .byte $01,$03,$10,$11,$20,$21,$23,$24,$40,$41,$42,$43,$44,$45,$46,$47
-    .byte $48,$4A,$4B,$50,$51,$52,$53,0
+    .byte $48,$4A,$4B,$4C,$50,$51,$52,$53,0
 err_text:
     .word t01,t03,t10,t11,t20,t21,t23,t24,t40,t41,t42,t43,t44,t45,t46,t47
-    .word t48,t4A,t4B,t50,t51,t52,t53
+    .word t48,t4A,t4B,t4C,t50,t51,t52,t53
 t01: .byte "SD NO ANSWER",0
 t03: .byte "SD INIT TIMEOUT",0
 t10: .byte "SD READ REJECTED",0
@@ -791,6 +1021,7 @@ t47: .byte "RAM CODE TOO BIG",0
 t48: .byte "SAVE STILL PENDING",0
 t4A: .byte "SAVE: OTHER CARD",0
 t4B: .byte "SAVE FILE CHANGED",0
+t4C: .byte "LAST GAME NOT FOUND",0
 t50: .byte "NO EDFC/DISKSYS.ROM",0
 t51: .byte "UNKNOWN FDS BIOS",0
 t52: .byte "NOT AN FDS IMAGE",0
@@ -934,6 +1165,9 @@ vwait:
     bpl @w
     rts
 
+; tiles $00-$7F: the font (colour 1 on the backdrop); tiles $80-$FF: the
+; box font, made from it here - the same glyph in plane 0, plane 1 all set:
+; text in colour 3 on colour 2 (the popup's grey)
 upload_font:
     lda PPUSTATUS
     lda #$00
@@ -952,6 +1186,31 @@ upload_font:
     inc ptr+1
     dex
     bne @l
+    lda #<font              ; PPU address is $0800 now
+    sta ptr
+    lda #>font
+    sta ptr+1
+    ldx #128
+@t: ldy #0
+@p0:
+    lda (ptr),y
+    sta PPUDATA
+    iny
+    cpy #8
+    bne @p0
+    lda #$FF
+@p1:
+    sta PPUDATA
+    dey
+    bne @p1
+    lda ptr
+    clc
+    adc #16
+    sta ptr
+    bcc :+
+    inc ptr+1
+:   dex
+    bne @t
     rts
 
 load_palette:
@@ -1082,6 +1341,7 @@ nmi:
 .include "region.s"
 .include "ramload.s"
 .include "rominfo.s"
+.include "lastgame.s"
 .ifdef SDW_TEST
 .include "sdw_test.s"
 .endif

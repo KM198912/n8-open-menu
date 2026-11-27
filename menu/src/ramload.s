@@ -129,6 +129,23 @@ rc_entry:
     lda src+1
     cmp #$50
     bne @tbl
+    lda #FPGA_PRG_PAGE      ; side IDs (automatic swap): 64 bytes at $0A800
+    sta N8_IDX
+    lda #FDS_ID_PAGE
+    sta N8_DAT
+    lda #FPGA_FDS_IDA
+    sta N8_IDX
+    lda #0
+    sta N8_DAT
+    lda #FPGA_FDS_IDD
+    sta N8_IDX
+    ldy #0
+@ids:
+    lda $4800,y
+    sta N8_DAT
+    iny
+    cpy #64
+    bne @ids
     lda #FPGA_FDS_NSIDES    ; for the side swap (Select + Down)
     sta N8_IDX
     lda fds_sides

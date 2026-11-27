@@ -369,21 +369,8 @@ module map_vrc6 #(
     // clock). level = mix x gain / 8, clamped to 1023 (gain 128: 61 -> 976),
     // inverted, then a first-order sigma-delta modulator updated every 16
     // board clocks: the share of 1s = (1023 - level) / 1024.
-    reg  [5:0]  mix_c = 6'd0;
-    reg  [13:0] lvl = 14'd0;
-    reg  [3:0]  sd_div = 4'd0;
-    reg  [10:0] sd = 11'd0;
-    reg         aud_r = 1'b1;
-    wire [9:0]  lvl10 = lvl[13] ? 10'd1023 : lvl[12:3];        // clamp
-    always @(posedge clk) begin
-        mix_c  <= mix;
-        lvl    <= mix_c * aud_gain;
-        sd_div <= sd_div + 4'd1;
-        if (sd_div == 4'd0) begin
-            sd    <= { 1'b0, sd[9:0] } + { 1'b0, 10'd1023 - lvl10 };
-            aud_r <= sd[10];
-        end
-    end
-    assign aud = aud_r;
+    // shared with the FDS core (aud_dac.v): mix x 32 = the common 11-bit
+    // level scale, so the output is exactly the former mix x gain / 8
+    aud_dac dac (.clk(clk), .level({ mix, 5'b00000 }), .gain(aud_gain), .aud(aud));
 
 endmodule

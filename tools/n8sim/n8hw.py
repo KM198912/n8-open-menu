@@ -236,7 +236,7 @@ class N8Board:
                     self.bug("FPGA reg $%02X write while unconfigured" % idx)
                 return
             self.fpga_regs[idx] = v
-            if 0x91 <= idx <= 0x94:
+            if 0x91 <= idx <= 0x97:
                 self.fds_port.append((idx, v))
             if idx == 0x80:
                 self.prg_page = v

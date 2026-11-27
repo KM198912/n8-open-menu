@@ -28,6 +28,8 @@ import fdsdisk                     # noqa: E402
 
 LEADIN, GAP = 3537, 122
 SWAP_HOLD, SWAP_EJECT = 1600000, 1790000      # CPU cycles (map_fds.v)
+AUTO_POLLS, POLL_GAP = 60, 100000              # automatic swap (map_fds.v)
+STUB2 = bytes.fromhex("A009 B100 991057 88 10F8 4CE3E6 EAEAEA")   # $5720-$572F
 SIDE_END = 65500
 ST_STOP, ST_LEAD, ST_BLK, ST_CRC, ST_GAP, ST_END, ST_WR = range(7)
 
@@ -48,10 +50,11 @@ class FDSPPU(PPU):
 class FDSBoard:
     """Python model of map_fds.v (same constants and rules) + CPU RAM + PPU."""
 
-    def __init__(self, prg, tables, side=0, ram=None, log=print, sram=None):
+    def __init__(self, prg, tables, side=0, ram=None, log=print, sram=None, ids=None):
         """prg: 512 KB PRG SRAM image, sram: 256 KB save SRAM image (sides
         0-2), tables: per side the block table (list of offsets ending in
-        $FFFF), ram: CPU RAM to share."""
+        $FFFF), ram: CPU RAM to share, ids: per side the 10 ID bytes the
+        menu sent ($96/$97; default: read from the sides in memory)."""
         self.log = log
         self.ram = ram if ram is not None else bytearray(0x800)
         self.prg = prg
@@ -74,6 +77,17 @@ class FDSBoard:
         self.eject = False
         self.ej_cnt = 0
         self.swaps = []
+        # automatic swap
+        if ids is None:
+            ids = [fdsdisk.side_id(side_bytes(prg, self.sram, i)) for i in range(4)]
+        self.ids = [list(x) for x in ids]
+        self.id_m = 0
+        self.last_addr = 0
+        self.ap_cnt = 0
+        self.ap_gap = 0
+        self.ap_arm = False
+        self.auto_ejects = 0
+        self.id_swaps = []
         self.ppu = FDSPPU(self)
         self.ppu.chr_read = lambda a: self.chr[a & 0x1FFF]
         self.ppu.chr_write = self._chr_write
@@ -135,6 +149,10 @@ class FDSBoard:
                 self.eject = False
                 self.side = 0 if self.side + 1 >= self.nsides else self.side + 1
                 self.swaps.append(self.side)
+        if self.ap_gap <= POLL_GAP:
+            self.ap_gap += n
+            if self.ap_gap > POLL_GAP:
+                self.ap_cnt = 0                      # not a waiting loop
         if self.io_en and self.t_en:
             left = n
             while left > 0:
@@ -214,6 +232,37 @@ class FDSBoard:
         return mem, base + (off & 0xFC00) + (a & 0x3FF)
 
     def read(self, a):
+        prev, self.last_addr = self.last_addr, a
+        if a == 0x4032 and prev < 0xE000 and self.ap_arm and not self.no_disk():
+            self.ap_gap = 0                          # a game poll of $4032
+            if self.ap_cnt == AUTO_POLLS:
+                self.ap_arm, self.ap_cnt = False, 0
+                self.eject, self.ej_cnt = True, 0
+                self.ph, self.sync = ST_STOP, False
+                self.auto_ejects += 1
+            else:
+                self.ap_cnt += 1
+        if 0x5720 <= a <= 0x572F:
+            return STUB2[a - 0x5720]
+        return self._read(a)
+
+    def id_write(self, y, v):
+        """the stub's STA $5710,Y: byte 9 first, byte 0 last"""
+        now = 0
+        for s in range(4):
+            if s < self.nsides and (v == 0xFF or v == self.ids[s][y]):
+                now |= 1 << s
+        if y == 9:
+            self.id_m = now
+            return
+        self.id_m &= now
+        if y == 0 and not self.no_disk():
+            self.ap_arm, self.ap_cnt = True, 0
+            if not self.id_m >> self.side & 1 and self.id_m:
+                self.side = (self.id_m & -self.id_m).bit_length() - 1
+                self.id_swaps.append(self.side)
+
+    def _read(self, a):
         if a < 0x2000:
             return self.ram[a & 0x7FF]
         if a < 0x4000:
@@ -262,6 +311,9 @@ class FDSBoard:
         return a >> 8
 
     def write(self, a, v):
+        self.last_addr = a
+        if 0x5710 <= a <= 0x5719:
+            self.id_write(a - 0x5710, v)
         if a < 0x2000:
             self.ram[a & 0x7FF] = v
         elif a < 0x4000:

@@ -8,6 +8,9 @@
 ;             $0A000-$0A7FF  block tables, 512 bytes per side (staging: the
 ;                            RAM code sends them to the core once it is
 ;                            loaded, see ramload.s)
+;             $0A800-$0A83F  side IDs, 16 bytes per side (staging, the same
+;                            way): block 1 bytes $0F-$18, for the automatic
+;                            side swap
 ;             $20000, $30000, $40000   sides 1-3 (not kept)
 ;   save SRAM $00000-$0FFFF  side 0 (65500 bytes, .fds form) - battery
 ;                            backed, so what the game writes there survives
@@ -31,6 +34,7 @@
 
 FDS_BIOS_PAGE = 16          ; PRG $08000 in 2 KB pages
 FDS_TBL_PAGE  = 20          ; PRG $0A000
+FDS_ID_PAGE   = 21          ; PRG $0A800
 FDS_MAX_SIDES = 4
 FDS_KEPT      = 1           ; sides in the save SRAM (side 0)
 
@@ -149,11 +153,14 @@ fds_magic:   .byte "N8FD"
 fds_sbase:   .byte 0
 ; BIOS IRQ handler, transfer path: $E1CE LDX $4031 / $E1D1 STA $4024 ->
 ; JSR $5700 / JSR $5704; end of a block write: $E729 JSR $E7A3 -> JSR $5708
-; (the core's stub, see map_fds.v)
+; (the core's stub, see map_fds.v); disk check: $E445 JSR $E6E3 -> JSR $5720
+; (the wanted ID to the core: automatic side swap)
 fds_bios_orig:  .byte $AE, $31, $40, $8D, $24, $40
 fds_bios_patch: .byte $20, $00, $57, $20, $04, $57
 fds_bios_orig2:  .byte $20, $A3, $E7
 fds_bios_patch2: .byte $20, $08, $57
+fds_bios_orig3:  .byte $20, $E3, $E6
+fds_bios_patch3: .byte $20, $20, $57
 
 ; launch_fds: load and start the FDS image in LIST record `sel` (after
 ; fds_detect). Returns only on error (carry set, A = code), with the menu's
@@ -261,6 +268,14 @@ fds_go:
     jmp @badbios
 :   dex
     bpl @ck2
+    ldx #2                  ; $E445 = page 16 + $445
+@ck3:
+    lda $4C45,x
+    cmp fds_bios_orig3,x
+    beq :+
+    jmp @badbios
+:   dex
+    bpl @ck3
     ldx #5
 @pt:
     lda fds_bios_patch,x
@@ -271,6 +286,8 @@ fds_go:
 @pt2:
     lda fds_bios_patch2,x
     sta $4F29,x
+    lda fds_bios_patch3,x
+    sta $4C45,x
     dex
     bpl @pt2
 
@@ -343,6 +360,49 @@ fds_go:
     lda fp_n
     cmp fds_sides
     bne @tb
+
+    ; --- side IDs: block 1 bytes $0F-$18 of every side -> SECBUF (16 per
+    ; side; free here, CPU RAM) -> PRG $0A800
+    lda #0
+    sta fp_n
+    sta fp_p
+    sta fp_p+1
+@ids:
+    lda #0
+    sta fp_e
+@idb:
+    lda fp_e
+    clc
+    adc #$0F
+    tay
+    jsr fp_rd
+    pha
+    lda fp_n
+    asl
+    asl
+    asl
+    asl
+    clc
+    adc fp_e
+    tax
+    pla
+    sta SECBUF,x
+    inc fp_e
+    lda fp_e
+    cmp #10
+    bne @idb
+    inc fp_n
+    lda fp_n
+    cmp fds_sides
+    bne @ids
+    lda #FDS_ID_PAGE
+    jsr fds_window
+    ldx #63
+@idc:
+    lda SECBUF,x
+    sta $4800,x
+    dex
+    bpl @idc
 
     ; --- save record: written files go back to the .fds at the next start
     lda #SRAM_MENU

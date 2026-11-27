@@ -32,6 +32,9 @@ module tb_fds;
     localparam HOLD = 2000, EJECT = 3000;   // side swap, shortened
     defparam dut.g_fds.fds.SWAP_HOLD = HOLD;
     defparam dut.g_fds.fds.SWAP_EJECT = EJECT;
+    localparam POLLS = 5, PGAP = 500;       // automatic swap, shortened
+    defparam dut.g_fds.fds.AUTO_POLLS = POLLS;
+    defparam dut.g_fds.fds.POLL_GAP = PGAP;
     n8_top #(.MAPPER(20)) dut (
         .cpu_dat(cpu_dat), .cpu_addr(a[14:0]), .cpu_ce(~a[15]), .cpu_rw(rw),
         .cpu_m2(m2), .mclk(m2), .cpu_irq(cpu_irq), .cpu_exp(cpu_exp),
@@ -177,6 +180,35 @@ module tb_fds;
         begin force dut.osmap.map_idx = 8'hFF; rd(16'h0000); release dut.osmap.map_idx; end
     endtask
 
+    // $4032 read by game code (the operand fetch before it at $8451) / by the BIOS ($E75B)
+    task game_poll;  begin rd(16'h8451); rd(16'h4032); end endtask
+    task bios_poll;  begin rd(16'hE75B); rd(16'h4032); end endtask
+    // the stub at $5720: wanted ID byte 9 first, byte 0 last (STA $5710,Y:
+    // dummy read, then the write); v[79:72] = byte 0 ... v[7:0] = byte 9
+    task id_check(input [79:0] v);
+        integer y;
+        begin
+            for (y = 9; y >= 0; y = y - 1) begin
+                rd(16'h5710 + y);
+                cycle(16'h5710 + y, 1, v[79 - 8 * y -: 8]);
+            end
+            rd(16'h0000);
+        end
+    endtask
+    // the ID of a side as the menu sends it: 10 bytes, padded to 16
+    task id_side(input [79:0] v);
+        integer y;
+        begin
+            for (y = 0; y < 16; y = y + 1)
+                reg_w(8'h97, (y < 10) ? v[79 - 8 * y -: 8] : 8'hEE);
+        end
+    endtask
+    localparam [79:0] ID_A  = 80'h01_4C_4E_4B_20_00_00_00_00_00,   // Zelda II side A
+                      ID_B  = 80'h01_4C_4E_4B_20_00_01_00_00_00,   // side B
+                      ID_C  = 80'h01_4C_4E_4B_20_00_00_01_00_00,   // disk 2 side A
+                      ID_D  = 80'h01_4C_4E_4B_20_00_01_01_00_00,   // disk 2 side B
+                      ID_BOOT = 80'hFF_FF_FF_FF_FF_FF_00_00_FF_FF; // the BIOS boot check
+
     integer i, t0, t1, n_ok, prev_xfer;
     reg ok;
 
@@ -242,6 +274,18 @@ module tb_fds;
         wr(16'h4022, 8'h00);                   // stop + acknowledge
         check("$4022 = 0 acknowledges", cpu_irq, 1);
         until_irq(200); check("$4022 = 0 stops the timer", cnt, 200);
+
+        // ---------------------------------------------------------------- sound (details: tb_fds_snd)
+        wr(16'h4023, 8'h83);
+        wr(16'h4080, 8'h80 | 8'd20);
+        rd(16'h4090); check("$4090 reads the volume gain ($54)", s_dat, 8'h54);
+        check("$4090: core drives, PRG SRAM off", s_prg_oe, 1);
+        wr(16'h4089, 8'h80);
+        wr(16'h4045, 8'h2A);
+        rd(16'h4045); check("wave RAM write/read ($4045 = $40 | $2A)", s_dat, 8'h6A);
+        wr(16'h4089, 8'h00);
+        check("cpu_exp driven in game mode (FDS audio)", cpu_exp !== 1'bz, 1);
+        wr(16'h4080, 8'h80);
 
         // ---------------------------------------------------------------- mirroring
         wr(16'h4025, 8'h26);
@@ -429,6 +473,88 @@ module tb_fds;
         check("second swap: back to side A (2 sides)", dut.g_fds.fds.side, 0);
         rd(16'h4032); check("second swap: disk in", s_dat[0], 0);
         pad_frame(8'h00);
+        wr(16'h4025, 8'h26);
+
+        // ---------------------------------------------------------------- automatic side swap
+        menu_again;
+        reg_w(8'h96, 8'h00);
+        id_side(ID_A); id_side(ID_B); id_side(ID_C); id_side(ID_D);
+        check("ID written: side 1 byte 6", dut.g_fds.fds.id1[6], 1);
+        check("ID written: side 3 byte 7 (padding skipped)", dut.g_fds.fds.id3[7], 1);
+        check("ID written: side 2 byte 9", dut.g_fds.fds.id2[9], 0);
+        reg_w(8'h95, 8'h02); reg_w(8'h94, 8'h00); reg_w(8'h83, 8'd20);
+        wr(16'h4023, 8'h83);
+        wr(16'h4025, 8'h26);
+        // the second stub
+        ok = 1;
+        for (i = 0; i < 13; i = i + 1) begin
+            rd(16'h5720 + i);
+            if (s_dat !== (i == 0 ? 8'hA0 : i == 1 ? 8'h09 : i == 2 ? 8'hB1 : i == 3 ? 8'h00 :
+                           i == 4 ? 8'h99 : i == 5 ? 8'h10 : i == 6 ? 8'h57 : i == 7 ? 8'h88 :
+                           i == 8 ? 8'h10 : i == 9 ? 8'hF8 : i == 10 ? 8'h4C : i == 11 ? 8'hE3 : 8'hE6))
+                ok = 0;
+        end
+        check("stub $5720: LDY #9 / LDA ($00),Y / STA $5710,Y / DEY / BPL / JMP $E6E3", ok, 1);
+        rd(16'h5722); check("stub $5720: core drives, PRG SRAM off", s_prg_oe, 1);
+        rd(16'h5710); check("$5710 (ID bytes) not driven", s_dat === 8'hzz, 1);
+        // not armed before the first BIOS disk check
+        for (i = 0; i < 3 * POLLS; i = i + 1) game_poll;
+        check("no BIOS check yet: game polls do not eject", s_dat[0], 0);
+        id_check(ID_BOOT);
+        check("boot check (wildcards): side A stays", dut.g_fds.fds.side, 0);
+        check("boot check arms the automatic eject", dut.g_fds.fds.ap_arm, 1);
+        for (i = 0; i < 3 * POLLS; i = i + 1) bios_poll;
+        check("BIOS polls: no eject", s_dat[0], 0);
+        for (i = 0; i < 4; i = i + 1) begin   // POLLS - 1 game polls at a time, then a pause
+            repeat (POLLS - 1) game_poll;
+            repeat (PGAP + 20) rd(16'h0000);
+        end
+        game_poll;
+        check("game polls with pauses > POLL_GAP: no eject", s_dat[0], 0);
+        repeat (PGAP + 20) rd(16'h0000);
+        t0 = -1;
+        for (i = 1; i <= POLLS + 3 && t0 < 0; i = i + 1) begin
+            game_poll;
+            repeat (PGAP - 30) rd(16'h0000);
+            bios_poll;                         // look without counting
+            if (s_dat[0]) t0 = i;
+        end
+        check("eject after POLLS + 1 game polls in a row", t0, POLLS + 1);
+        check("auto eject: $4032 = $47", s_dat, 8'h47);
+        id_check(ID_B);
+        check("BIOS check during the eject: no side change", dut.g_fds.fds.side, 0);
+        check("BIOS check during the eject: does not re-arm", dut.g_fds.fds.ap_arm, 0);
+        repeat (EJECT + 50) rd(16'h0000);
+        rd(16'h4032); check("auto eject: disk in again", s_dat[0], 0);
+        check("auto eject: next side (B)", dut.g_fds.fds.side, 1);
+        for (i = 0; i < 3 * POLLS; i = i + 1) game_poll;
+        check("no new BIOS check since the auto eject: no second eject", s_dat[0], 0);
+        id_check(ID_B);
+        check("check wants B, B in: stays", dut.g_fds.fds.side, 1);
+        check("check re-arms", dut.g_fds.fds.ap_arm, 1);
+        id_check(ID_A);
+        check("check wants A, B in: A at once", dut.g_fds.fds.side, 0);
+        rd(16'h5800); check("A at once: save SRAM selected", s_ram_ce, 1);
+        id_check(80'h01_99_4E_4B_20_00_01_00_00_00);
+        check("no side matches (other game): no change", dut.g_fds.fds.side, 0);
+        id_check(ID_D);
+        check("2 sides loaded: disk 2 side B (side 3) not chosen", dut.g_fds.fds.side, 0);
+        id_check(80'hFF_FF_FF_FF_FF_FF_01_FF_FF_FF);
+        check("wildcards, side byte 1: B", dut.g_fds.fds.side, 1);
+        menu_again; reg_w(8'h95, 8'h04); reg_w(8'h94, 8'h00); reg_w(8'h83, 8'd20);
+        wr(16'h4023, 8'h83);
+        check("menu mode disarms", dut.g_fds.fds.ap_arm, 0);
+        id_check(ID_D);
+        check("4 sides: disk 2 side B = side 3", dut.g_fds.fds.side, 3);
+        rd(16'h5800); check("side 3: PRG SRAM $40000", s_prg_map[8:6], 4);
+        id_check(ID_C);
+        check("4 sides: disk 2 side A = side 2", dut.g_fds.fds.side, 2);
+        id_check(80'hFF_FF_FF_FF_FF_FF_00_FF_FF_FF);
+        check("several match (A, C): the inserted one (C) stays", dut.g_fds.fds.side, 2);
+        id_check(ID_B);
+        check("4 sides: side B = side 1", dut.g_fds.fds.side, 1);
+        id_check(80'hFF_FF_FF_FF_FF_FF_00_FF_FF_FF);
+        check("several match (A, C), neither in: the first (A)", dut.g_fds.fds.side, 0);
         wr(16'h4025, 8'h26);
 
         // ---------------------------------------------------------------- NTSC game on PAL

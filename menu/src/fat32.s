@@ -10,7 +10,7 @@ REC_NAME    = 0         ; up to 51 chars + 0
 REC_ATTR    = 52
 REC_CLUS    = 53        ; 4 bytes
 REC_FSIZE   = 57        ; 4 bytes
-MAX_ENTRIES = 128
+MAX_ENTRIES = 127         ; slot 128 ($7FC0) holds the last-game record (lastgame.s)
 NAME_MAX    = 51
 
 ; unnamed label: keeps the cheap-local (@) label scope intact
@@ -414,7 +414,19 @@ dir_load:
     beq @isfile
     lda pass                ; folder: only in pass 0
     bne @reset
-    beq @take
+    lda cur_dir             ; the root's /EDFC (firmware) is not listed;
+    ora cur_dir+1           ; the loader finds it by name (find_edfc)
+    ora cur_dir+2
+    ora cur_dir+3
+    bne @take
+    ldy #10
+@edfc:
+    lda (ptr),y
+    cmp name_edfc,y
+    bne @take
+    dey
+    bpl @edfc
+    bmi @reset
 @isfile:
     lda pass                ; file: only in pass 1
     beq @reset
