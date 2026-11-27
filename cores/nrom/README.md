@@ -10,6 +10,8 @@ revision sets the `MAPPER` parameter and becomes its own RBF:
 | 2 UxROM     | `n8_uxrom`| `map_simple.v` | `/EDFC/MAPS/102.RBF` |
 | 3 CNROM     | `n8_cnrom`| `map_simple.v` | `/EDFC/MAPS/103.RBF` |
 | 7 AxROM     | `n8_axrom`| `map_simple.v` | `/EDFC/MAPS/107.RBF` |
+| 9 MMC2      | `n8_mmc2` | `map_mmc2.v` | `/EDFC/MAPS/109.RBF`   |
+| 10 MMC4     | `n8_mmc4` | `map_mmc2.v` | `/EDFC/MAPS/110.RBF`   |
 | 24 VRC6a    | `n8_vrc6a`| `map_vrc6.v` | `/EDFC/MAPS/124.RBF` |
 | 26 VRC6b    | `n8_vrc6b`| `map_vrc6.v` | `/EDFC/MAPS/126.RBF` |
 | 66 GxROM    | `n8_gxrom`| `map_simple.v` | `/EDFC/MAPS/166.RBF` |
@@ -48,6 +50,15 @@ documentation; no Krikzz code.
 
 ## Build
 
+All cores at once (from the repository root; runs Quartus from the command
+line, one revision after another, logs in `test/build_logs/`, padded RBFs
+and `MAPROUT.BIN` into `test/m2card/EDFC/`):
+```
+python tools/build_cores.py                  # everything in cores/cores.txt + 255.RBF
+python tools/build_cores.py --only n8_mmc2   # single revisions
+```
+One revision by hand:
+
 1. Open `n8_nrom.qpf` in Quartus II 13.0 SP1 (last version with Cyclone II).
 2. Pick the revision in the toolbar drop-down (or Project > Revisions).
 3. Processing > Start Compilation -> `output_files/<revision>.rbf`.
@@ -69,6 +80,8 @@ documentation; no Krikzz code.
 5. Testbench in `cores/tb` (instance `n8_top #(.MAPPER(N))`), add it to
    `run.sh`, run it before the first Quartus build:
    `MSYS_NO_PATHCONV=1 wsl -e sh /mnt/h/osdev/n8-open/cores/tb/run.sh`
+6. `docs/mappers.md`: the mapper's status, then `python tools/mk_assets.py`
+   (README chart `assets/mappers.svg`) and commit the SVG with it.
 
 ## Test
 

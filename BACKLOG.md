@@ -94,6 +94,19 @@
 
 ## Done
 
+- **MMC2 (mapper 9) + MMC4 (mapper 10)** (2026-11-27; hardware: Mike
+  Tyson's Punch-Out!! (MMC2); Fire Emblem Gaiden (MMC4) incl. the battery
+  save across a power cycle):
+  `cores/nrom/map_mmc2.v`, revisions `n8_mmc2` -> `109.RBF`, `n8_mmc4` ->
+  `110.RBF`. From the wiki: `$A000` PRG (MMC2 8 KB + last three 8 KB fixed;
+  MMC4 16 KB + last 16 KB, 8 KB PRG RAM at `$6000`), `$B000-$E000` CHR 4 KB
+  pairs selected by the latches, `$F000` mirroring; latches switch after a
+  PPU read of `$xFD8`/`$xFE8` (MMC2 latch 0 exactly that address, latch 1
+  and both MMC4 latches the row `$xFD8-$xFDF`/`$xFE8-$xFEF`), so the
+  trigger tile is drawn from the old bank. Not documented, chosen: latches
+  start at `$FE`. `tb_mmc2` 49 (MMC2) / 43 (MMC4) checks, 12 mutations
+  caught.
+
 - **Menu: SUPPORTED MAPPERS screen + new buttons** (2026-11-27,
   simulation): A on a file opens the file menu (`SELECT + LOAD` first, so
   A, A starts a game), A on a folder enters it; Select opens `SUPPORTED

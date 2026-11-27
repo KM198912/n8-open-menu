@@ -16,6 +16,11 @@ Building a card folder from scratch:
 
 ```
 menu\build.bat                                   -> menu/build/OS.BIN
+python tools/build_cores.py                      -> all cores + MAPROUT.BIN in m2card/EDFC
+```
+or core by core:
+```
 python tools/mk_maprout.py cores/cores.txt test/m2card/EDFC/MAPROUT.BIN
 python tools/pad_rbf.py cores/nrom/output_files/<revision>.rbf <NNN> test/m2card/EDFC/MAPS
 ```
+`build_logs/`: Quartus logs of `tools/build_cores.py`, one per revision.

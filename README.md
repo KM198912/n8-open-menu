@@ -21,6 +21,11 @@ in `docs/hw-interface.md`.
 
 ## Status
 
+![Mapper chart: n8-open cores (green), original firmware only (yellow), neither (white)](assets/mappers.svg)
+
+Generated from `cores/cores.txt` and `docs/mappers.md` by
+`python tools/mk_assets.py`; details per mapper: `docs/mappers.md`.
+
 | | |
 |---|---|
 | Menu | browse (FAT32, long names, sorted), ROM info, game start, battery saves to SD |
@@ -32,6 +37,7 @@ in `docs/hw-interface.md`.
 | MMC3 (4) | `104.RBF` |
 | MMC5 (5) | `105.RBF` - banking, ExRAM, fill mode, scanline IRQ, extended attributes, split screen, audio (2 pulses + PCM on `cpu_exp`); saves 8 KB only |
 | AxROM (7) | `107.RBF` |
+| MMC2 (9), MMC4 (10) | `109.RBF`, `110.RBF` - CHR latches ($FD/$FE tiles); MMC4 with PRG RAM |
 | VRC6 (24, 26) | `124.RBF`, `126.RBF` - banking, IRQ, audio (2 pulses + saw on `cpu_exp`) |
 | GxROM (66) | `166.RBF` |
 

@@ -5,7 +5,7 @@ screen (151 mappers), and where n8-open stands on each. Our RBF number
 is 100 + mapper, in `/EDFC/MAPS/`. Names are filled in where they are
 well known; `-` = still to look up (NESdev wiki).
 
-n8-open: 10 of 151 have a core (see the status column).
+n8-open: 12 of 151 have a core (see the status column).
 
 | Mapper | Name | Status | RBF | Tested with |
 |---:|---|---|---|---|
@@ -16,8 +16,8 @@ n8-open: 10 of 151 have a core (see the status column).
 | 4 | MMC3 (TxROM) | done | `104.RBF` | Super Mario Bros. 3, Darkwing Duck |
 | 5 | MMC5 (ExROM) | partial: saves 8 KB only | `105.RBF` | Castlevania III, Just Breed, Nobunaga's Ambition II, Uchuu Keibitai SDF |
 | 7 | AxROM | done | `107.RBF` | Battletoads |
-| 9 | MMC2 (PxROM) | open | - | - |
-| 10 | MMC4 (FxROM) | open | - | - |
+| 9 | MMC2 (PxROM) | done | `109.RBF` | Mike Tyson's Punch-Out!! |
+| 10 | MMC4 (FxROM) | done | `110.RBF` | Fire Emblem Gaiden (incl. battery save) |
 | 11 | Color Dreams | open | - | - |
 | 12 | - | open | - | - |
 | 13 | CPROM | open | - | - |

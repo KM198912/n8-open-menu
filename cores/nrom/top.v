@@ -218,6 +218,21 @@ module n8_top #(
             assign gm_ppu_oe = 1'b0;  assign gm_ppu_do = 8'h00;
             assign gm_aud_en = 1'b1;
             assign gm_prg_wok = 1'b1;
+        end else if (MAPPER == 9 || MAPPER == 10) begin : g_mmc2
+            // MMC2 / MMC4 (CHR latches on PPU reads of tiles $FD/$FE)
+            map_mmc2 #(.MAPPER(MAPPER)) mmc2 (
+                .mclk(mclk), .m2(cpu_m2), .clk(clk), .rst(os_mode), .cpu_dat(cpu_dat),
+                .cpu_addr(cpu_addr), .cpu_ce(cpu_ce), .cpu_rw(cpu_rw),
+                .ppu_addr(ppu_addr), .ppu_rd(ppu_rd), .ppu_wr(ppu_wr),
+                .chr_is_ram(chr_is_ram),
+                .prg_a(gm_prg_a), .prg_rom(gm_prg_rom), .prg_ram(gm_prg_ram), .prg_wr(gm_prg_wr),
+                .chr_a(gm_chr_a), .chr_sel(gm_chr_sel), .chr_wr(gm_chr_wr),
+                .ciram_a10(gm_ciram_a10), .ciram_sel(gm_ciram_sel), .irq(gm_irq)
+            );
+            assign gm_cpu_oe = 1'b0;  assign gm_cpu_do = 8'h00;
+            assign gm_ppu_oe = 1'b0;  assign gm_ppu_do = 8'h00;
+            assign gm_aud = 1'b0;     assign gm_aud_en = 1'b0;
+            assign gm_prg_wok = 1'b0;
         end else begin : g_nrom
             // NROM (MAPPER 0, also the default for the menu/dump builds)
             map_nrom nrom (
