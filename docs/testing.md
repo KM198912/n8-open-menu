@@ -14,8 +14,9 @@ cores/tb/run.sh          (Icarus Verilog 12; on Windows through WSL:
 |---|---|
 | `tb_mmc1.v` | MMC1 serial port, PRG/CHR modes, mirroring, PRG RAM, SUROM |
 | `tb_mmc3.v` | MMC3 banking, PRG RAM protect, scanline IRQ with a PPU fetch model (A12 filter, latch 0, BG/sprite table layouts) |
-| `tb_mmc5.v` | MMC5 PRG/CHR/RAM, nametables, fill mode, ExRAM, scanline detection and IRQ from real PPU reads, 8x16 sets, extended attributes; monitors that the data buses are only driven when allowed |
+| `tb_mmc5.v` | MMC5 PRG/CHR/RAM, nametables, fill mode, ExRAM, scanline detection and IRQ from real PPU reads, 8x16 sets, extended attributes, vertical split (left/right, counter, attributes, `$5202`); monitors that the data buses are only driven when allowed |
 | `tb_simple.v` | discrete mappers (`-Ptb_simple.M=<mapper>`): UxROM |
+| `tb_mmc5_snd.v` | MMC5 sound against `tools/n8sim/mmc5_audio.py`, cycle for cycle (as `tb_fds_snd`): pulse timers and duties, periods < 8, envelope incl. loop, length counter at 240 Hz incl. halt and `$5015`, PCM write/read mode, `$00` -> IRQ flag, `$5010`/`$5015` reads |
 | `tb_fds_snd.v` | FDS sound against `tools/n8sim/fds_audio.py`, cycle for cycle (`fds_audio.py gen` writes the stimulus, `check` compares): wave, modulation, envelopes, master volume, halts, write protection, reads |
 | `tb_fds.v` | FDS: memory map, registers, timer IRQ incl. the PAL correction (Zelda II's split line), BIOS stub, disk stream through the read window (lead-in, blocks, CRC, gaps, end of disk, the BIOS's short reset pulse), overrun -> CRC error bit, a write session with the block table update and the BIOS's flush byte, the side swap (manual; automatic: game polls vs. BIOS polls, threshold, pause reset, arming, the `$5720` stub, side by ID with wildcards, 2 and 4 sides); the lead-in is shortened to 200 byte times (`defparam`), ~15 s per run |
 

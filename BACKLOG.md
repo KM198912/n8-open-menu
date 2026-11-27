@@ -52,10 +52,10 @@
   (check whether the fixed ROM was on the card).
 - Not implemented yet: Game Genie, save states, trainers, more
   mappers.
-- MMC5 phase 3-4: vertical split (Uchuu Keibitai SDF, Bandit Kings ending),
-  audio on `cpu_exp`, saves > 8 KB (Koei: 32 KB). Open detail: the
-  background prefetch of line 0 happens before "in frame" is set, so its two
-  tiles get neither the 8x16 set B nor extended attributes (not seen yet).
+- MMC5: saves > 8 KB (Koei: 32 KB) not supported yet. Open detail: the background
+  prefetch of line 0 happens before "in frame" is set, so its two tiles get
+  neither the 8x16 set B, nor extended attributes, nor the split (not seen
+  yet).
 - **Expansion audio level**: `AUD_GAIN_DEFAULT` (128 = 1.0) is not
   calibrated yet. Needs a recording of `menu/tests/vrc6_tone.nes` on an
   original N8 (VRC6 vs 2A03 pulse per pitch), then a per-chip default + a
@@ -93,6 +93,51 @@
   MMC6 (StarTropics, mapper 4 with different PRG RAM) are not supported.
 
 ## Done
+
+- **Menu: SUPPORTED MAPPERS screen + new buttons** (2026-11-27,
+  simulation): A on a file opens the file menu (`SELECT + LOAD` first, so
+  A, A starts a game), A on a folder enters it; Select opens `SUPPORTED
+  MAPPERS` (`menu/src/mapinfo.s`): the numbers with an entry in the card's
+  `MAPROUT.BIN` (7 per line), `FDS: YES/NO` (entry `$FE`); without the
+  file error `$44`. `read_maprout` split out of `lookup_core`. Release
+  chart: `tools/mk_mapchart.py` (PNG: n8-open cores / original firmware
+  only / neither, from `cores/cores.txt` + `docs/mappers.md`). Simulator:
+  sdroot (old MAPROUT: 10 mappers, FDS: NO) and fds card (FDS: YES) match
+  their MAPROUT, no MAPROUT -> 44, B back, A popup -> `SELECT + LOAD`
+  starts `hello.nes`, A on a folder enters, Start and paging unchanged.
+
+- **MMC5 phase 4: audio** (2026-11-27; hardware: Uchuu Keibitai SDF sounds
+  the same as in FCEUX - effects on dying, none on shooting there either):
+  `cores/nrom/mmc5_snd.v`
+  - two pulses (as the APU's, no sweep, periods < 8 not muted, envelope and
+  length counter at a fixed 240 Hz = M2 / 7424, the die estimate) and the
+  8-bit PCM channel (write mode, read mode from `$8000-$BFFF`, `$00` sets
+  the IRQ flag, `$5010` read acknowledges); out through `aud_dac.v`
+  (`cpu_exp`, gain `$89`), IRQ = scanline OR PCM. Inferred: the APU's
+  `$4000`/`$4003` layouts, timer every other CPU cycle, `$5015` like
+  `$4015`. Not implemented: the reversed polarity. Level: pulse 15 = a
+  VRC6 pulse at 15; PCM ~3.5x quieter than the wiki's ratio (fits 11 bits;
+  open calibration). Reference model `tools/n8sim/mmc5_audio.py`;
+  `tb_mmc5_snd` 369,592 cycles identical; 16 mutations caught (the
+  envelope-loop one first survived: the program ran too short for the
+  envelope to reach 0 - lengthened); `tb_mmc5` 152 checks.
+- **MMC5 phase 3: vertical split** (2026-11-27; hardware: Uchuu Keibitai
+  SDF's intro and game picture right): `$5200-$5202`
+  in `map_mmc5.v`. From the wiki: left split = tiles 0..T-1, right = T and
+  up; ExRAM is the split's nametable; `$5202` = 4 KB page for its pattern
+  reads (no `$5130`, no CHR mode); its counter starts at `$5201` every
+  frame; off in ExRAM modes 2/3 and with `$2001` rendering bits clear; in
+  mode 1 no extended attributes in the split. Fine Y comes from the PPU (CL
+  wiring - this board's CHR SRAM takes A0-A9 from the PPU anyway).
+  Inferred and marked as such in the core: tile n = screen column n (the
+  prefetch is columns 0/1), nametable = ExRAM[row * 32 + column],
+  attribute = ExRAM[$3C0 + counter / 32 * 8 + column / 4] with the pair
+  selected by the MMC5 and copied x4, counter +1 per line with 239 -> 0
+  and 240-255 counting on to 255, reads 160-170 use the next line's value.
+  `tb_mmc5` 144 checks (37 new: left/right thresholds, counter start /
+  wrap / 240-255, prefetch line, attribute pairs, `$5202` page, normal
+  tiles beside it, ext attributes next to it, mode 2 / `$2001` off,
+  sprites unaffected).
 
 - **Menu: `/EDFC` hidden** (2026-11-27, simulation): `dir_load` skips the
   root's folder with the 8.3 name `EDFC`; everything inside it is found by

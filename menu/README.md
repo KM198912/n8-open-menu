@@ -8,10 +8,14 @@ from `docs/hw-interface.md`. The cartridge's BIOS (in its flash) loads it from
 
 - Browse the SD card (FAT32, MBR or superfloppy, SDSC/SDHC): folders first,
   then files alphabetically (case-insensitive), long file names.
-  Up/Down (auto-repeat), Left/Right page, A open, B back. Up to 127
-  entries per folder. `/EDFC` (firmware, cores, BIOS, saves) is not listed.
-- Select on a ROM: the file menu, a box over the list (Up/Down, A confirms,
-  B closes). `SELECT + LOAD` / `SELECT ONLY` store the game as the last
+  Up/Down (auto-repeat), Left/Right page, A on a folder opens it, B back.
+  Up to 127 entries per folder. `/EDFC` (firmware, cores, BIOS, saves) is
+  not listed.
+- Select: `SUPPORTED MAPPERS` - the mapper numbers the card's
+  `/EDFC/MAPROUT.BIN` routes to a core, and whether FDS is supported
+  (`src/mapinfo.s`). B goes back.
+- A on a ROM: the file menu, a box over the list (Up/Down, A confirms,
+  B closes); `SELECT + LOAD` (highlighted first) starts the game. `SELECT + LOAD` / `SELECT ONLY` store the game as the last
   game (and start it / go back to the list); `START: <name>` above the
   status line shows it, also after power-off. Start loads it from any
   folder (B then leads back to where you were); if the file is no longer

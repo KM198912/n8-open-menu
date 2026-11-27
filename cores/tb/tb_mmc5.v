@@ -125,6 +125,7 @@ module tb_mmc5;
     reg [7:0] dat50 [0:340];
     reg [8:0] chr50 [0:340];
     reg       cice50 [0:340];
+    integer   rec_line = 50;             // the line dat50/chr50/cice50 record
 
     function [13:0] nt_of(input integer l, input integer t);
         nt_of = 14'h2000 | ((((l < 0 ? 0 : l) >> 3) * 32 + t) & 10'h3FF);
@@ -171,7 +172,7 @@ module tb_mmc5;
                     ppu_rd = 0;
                     #93;
                     if (!pa[13] && ppu_dat !== 8'hzz) bad_ppu_pt = bad_ppu_pt + 1;
-                    if (line == 50) begin
+                    if (line == rec_line) begin
                         dat50[dot] = ppu_dat; chr50[dot] = chr_map; cice50[dot] = ppu_ciram_ce;
                     end
                     if (line == 50 && dot == 5)   bg_chr  = chr_map;
@@ -193,6 +194,7 @@ module tb_mmc5;
     end
 
     integer irq_line = -1, irq_dot = -1;
+    integer i;
     reg [8:0] sp_ref, bg_ref;
     always @(negedge cpu_irq) if (cpu_irq === 1'b0) begin irq_line = line; irq_dot = dot; end
 
@@ -307,6 +309,22 @@ module tb_mmc5;
         rd(16'h5205); check("multiplier low", s_dat, 8'hA8);
         rd(16'h5206); check("multiplier high", s_dat, 8'h03);
 
+        // ================================================================ sound (details: tb_mmc5_snd)
+        check("cpu_exp driven in game mode (MMC5 audio)", cpu_exp !== 1'bz, 1);
+        rd(16'h5015); check("$5015: no length counters running", s_dat, 8'h00);
+        check("$5015 read: PRG SRAM /OE off", s_prg_oe, 1);
+        wr(16'h5015, 8'h03); wr(16'h5003, 8'h08);
+        rd(16'h5015); check("$5015: pulse 1 length loaded", s_dat, 8'h01);
+        wr(16'h5015, 8'h00);
+        rd(16'h5015); check("$5015 = 0 clears it", s_dat, 8'h00);
+        wr(16'h5010, 8'h80); wr(16'h5011, 8'h00);
+        repeat (3) rd(16'h0000);
+        check("PCM IRQ on a $00 write", cpu_irq, 0);
+        rd(16'h5010); check("$5010: IRQ flag", s_dat, 8'h80);
+        repeat (3) rd(16'h0000);
+        check("PCM IRQ acknowledged by the $5010 read", cpu_irq, 1);
+        wr(16'h5010, 8'h00);
+
         // ================================================================ scanline IRQ
         wr(16'h2000, 8'h00); wr(16'h2001, 8'h18);
         wr(16'h5203, 8'd20); wr(16'h5204, 8'h80);
@@ -377,6 +395,87 @@ module tb_mmc5;
         run_frames(1);
         check("ext + rendering off ($2001=0): no attribute answer", dat50[3], 8'hzz);
         wr(16'h2001, 8'h18); wr(16'h5104, 8'h00);
+
+        // ================================================================ vertical split
+        // ExRAM: tile byte at row r, column c = {r[2:0], c[4:0]}; the
+        // attribute row 1 ($3C8-$3CF, counter 32-63) = $E4 (pairs: top-left
+        // 0, top-right 1, bottom-left 2, bottom-right 3), the other rows $1B. Column c's nametable read on its
+        // own line starts at dot (c - 2) * 8 + 1; columns 0/1 are the
+        // previous line's prefetch at dots 321/329.
+        wr(16'h5104, 8'h02);
+        for (i = 0; i < 960; i = i + 1)
+            wr(16'h5C00 + i, i[7:0]);       // = {row[2:0], column}
+        for (i = 960; i < 1024; i = i + 1)  // attribute row 1 (counter 32-63): $E4,
+            wr(16'h5C00 + i, (i >= 968 && i < 976) ? 8'hE4 : 8'h1B);   // others $1B
+        wr(16'h5104, 8'h00);
+        wr(16'h5202, 8'h25);                 // split pattern page $25 (4 KB)
+        wr(16'h5201, 8'd0);
+        wr(16'h5200, 8'h84);                 // left split, 4 tiles
+        rec_line = 50;                       // counter 50: row 6, counter bit 4 = 1
+        run_frames(1);
+        check("split L4: col 2 NT from ExRAM row 6", dat50[1], 8'hC2);
+        check("split L4: col 2 NT: CIRAM off", cice50[1], 1);
+        check("split L4: col 2 attribute: bottom-right pair x4", dat50[3], 8'hFF);
+        check("split L4: col 2 attribute: CIRAM off", cice50[3], 1);
+        check("split L4: col 2 pattern lo: page $25", chr50[5], 9'b0100101_00);
+        check("split L4: col 2 pattern hi: page $25", chr50[7], 9'b0100101_00);
+        check("split L4: col 3 NT", dat50[9], 8'hC3);
+        check("split L4: col 4 NT normal (CIRAM)", cice50[17], 0);
+        check("split L4: col 4 NT not driven", dat50[17], 8'hzz);
+        check("split L4: col 4 attribute not driven", dat50[19], 8'hzz);
+        check("split L4: col 4 pattern: normal bank", chr50[21], bg_ref);
+        check("split L4: prefetch col 0 NT (next line, row 6)", dat50[321], 8'hC0);
+        check("split L4: prefetch col 0 attribute: bottom-left pair x4", dat50[323], 8'hAA);
+        check("split L4: prefetch col 1 NT", dat50[329], 8'hC1);
+        check("split L4: prefetch pattern: page $25", chr50[325], 9'b0100101_00);
+        check("split: sprite pattern keeps its bank", spr_chr, sp_ref);
+        check("split: sprite garbage NT read not answered", dat50[257], 8'hzz);
+        wr(16'h5200, 8'hDE);                 // right split from tile 30
+        run_frames(1);
+        check("split R30: col 29 NT normal", cice50[217], 0);
+        check("split R30: col 30 NT from ExRAM", dat50[225], 8'hDE);
+        check("split R30: col 30 attribute: bottom-right pair x4", dat50[227], 8'hFF);
+        check("split R30: col 32 attribute: bottom-left pair x4", dat50[243], 8'hAA);
+        check("split R30: col 31 attribute: bottom-right pair x4", dat50[235], 8'hFF);
+        check("split R30: col 33 NT (column 1 of the row)", dat50[249], 8'hC1);
+        check("split R30: prefetch col 0 normal", cice50[321], 0);
+        // counter: start value, wrap after 239, 240-255 count on to 255
+        wr(16'h5200, 8'h84);
+        wr(16'h5201, 8'd236);
+        rec_line = 3;                        // 239: row 29
+        run_frames(1);
+        check("split counter: line 3 = 236 + 3 = 239 (row 29)", dat50[1], 8'hA2);
+        check("split counter: prefetch on line 3 = next line's row 0", dat50[321], 8'h00);
+        rec_line = 4;                        // wrapped: 0
+        run_frames(1);
+        check("split counter: line 4 wraps to 0 (row 0)", dat50[1], 8'h02);
+        wr(16'h5201, 8'd248);
+        rec_line = 7;                        // 255: row 31 = attribute area
+        run_frames(1);
+        check("split counter: 248 + 7 = 255 shows the attribute area", dat50[1], 8'h1B);
+        rec_line = 8;
+        run_frames(1);
+        check("split counter: 255 -> 0", dat50[1], 8'h02);
+        wr(16'h5201, 8'd0);
+        rec_line = 50;
+        // extended attributes next to the split (mode 1)
+        wr(16'h5104, 8'h01);
+        run_frames(1);
+        check("split + ext: col 2 attribute from the split", dat50[3], 8'hFF);
+        check("split + ext: col 2 pattern: split page", chr50[5], 9'b0100101_00);
+        check("split + ext: col 5 attribute: ext palette of ExRAM $C5 x4", dat50[27], 8'hFF);
+        check("split + ext: col 5 pattern: ext page $05", chr50[29], 9'b0_000101_00);
+        wr(16'h5104, 8'h02);                 // mode 2: no split
+        run_frames(1);
+        check("split off in mode 2: col 2 NT from CIRAM", cice50[1], 0);
+        check("split off in mode 2: not driven", dat50[1], 8'hzz);
+        wr(16'h5104, 8'h00); wr(16'h2001, 8'h00);
+        run_frames(1);
+        check("split + rendering off ($2001=0): not driven", dat50[1], 8'hzz);
+        wr(16'h2001, 8'h18);
+        wr(16'h5200, 8'h04);                 // threshold set, split disabled
+        run_frames(1);
+        check("split disabled ($5200 bit 7 = 0): col 2 normal", cice50[1], 0);
 
         // ================================================================ in-frame clears
         wait_line(100);

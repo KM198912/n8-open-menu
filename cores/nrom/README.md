@@ -37,7 +37,8 @@ Sources:
   there). How the disk reaches the CPU despite the SRAM taking A0-A9 from
   the console bus: see the comment at the top of `map_fds.v`.
 - `aud_dac.v`: expansion audio DAC on `cpu_exp` (gain `$89`, sigma-delta),
-  shared by VRC6 and FDS; `fds_snd.v`: the FDS sound unit.
+  shared by VRC6, FDS and MMC5; `fds_snd.v`: the FDS sound unit;
+  `mmc5_snd.v`: the MMC5's two pulses and PCM channel.
 - `top.v`: board glue; a `generate` block instantiates only the mapper of
   this build. The core never drives the CPU data bus.
 - `n8_nrom.sdc`: timing constraints, shared by all revisions.

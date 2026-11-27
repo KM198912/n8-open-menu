@@ -10,6 +10,7 @@ data and firmware that must not be published, plus generated files.
 | `*.img` | FAT32 images for the simulator | `python tools/mk_sdimg.py <folder> <out.img>` |
 | `dump/` | dumps from the original cartridge (BIOS, MAPROUT, cores, saves) - research only | your own hardware; never commit |
 | `ab/` | A/B test set for foreign cores, see `docs/testing.md` | generated |
+| `release/` | release folder, zip and mapper chart (`n8-open-<version>-mappers.png`) | `test/mk_release.py` (local), chart: `python tools/mk_mapchart.py` |
 
 Building a card folder from scratch:
 

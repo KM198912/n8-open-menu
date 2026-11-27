@@ -14,7 +14,7 @@ n8-open: 10 of 151 have a core (see the status column).
 | 2 | UxROM | done | `102.RBF` | Castlevania (USA, Europe) |
 | 3 | CNROM | done | `103.RBF` | Solomon's Key |
 | 4 | MMC3 (TxROM) | done | `104.RBF` | Super Mario Bros. 3, Darkwing Duck |
-| 5 | MMC5 (ExROM) | partial: no split screen, no audio, saves 8 KB only | `105.RBF` | Castlevania III, Just Breed, Nobunaga's Ambition II |
+| 5 | MMC5 (ExROM) | partial: saves 8 KB only | `105.RBF` | Castlevania III, Just Breed, Nobunaga's Ambition II, Uchuu Keibitai SDF |
 | 7 | AxROM | done | `107.RBF` | Battletoads |
 | 9 | MMC2 (PxROM) | open | - | - |
 | 10 | MMC4 (FxROM) | open | - | - |

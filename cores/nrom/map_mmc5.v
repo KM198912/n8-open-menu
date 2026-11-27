@@ -5,7 +5,34 @@
 // (CIRAM, ExRAM, fill mode), ExRAM CPU access, PPU register snooping,
 // scanline detection, in-frame flag, scanline IRQ, multiplier.
 // Phase 2: extended attributes (ExRAM mode 1, see below).
-// Not yet: vertical split, audio, MMC5A extras.
+// Phase 3: vertical split (see below).
+// Phase 4: audio - two pulses + PCM in mmc5_snd.v, out on cpu_exp through
+// aud_dac.v (gain $89 like VRC6/FDS); $5010/$5015 reads, PCM IRQ.
+// Not yet: MMC5A extras.
+//
+// Vertical split ($5200 = E S - T T T T T, $5201 scroll, $5202 4 KB CHR
+// bank; ExRAM modes 0/1, rendering on, background fetches only). The wiki
+// documents: left split = tiles 0..T-1, right split = tiles T and up; the
+// split's nametable is ExRAM; $5202 selects a 4 KB page for its pattern
+// reads ($5130 and the CHR mode do not apply); its own line counter starts
+// at $5201 every frame; 240-255 show the attribute area as tiles for the
+// first lines; in mode 1 the split region has no extended attributes.
+// Fine Y: on Nintendo's (CL) boards - and on this one, whose CHR SRAM takes
+// A0-A9 from the PPU - the PPU's own fine Y addresses the pattern row.
+// Inferred (not in the wiki):
+//  - tile n = screen column n: tiles 0 and 1 are the previous line's
+//    prefetch, the line's own fetches are columns 2-33
+//  - nametable byte = ExRAM[row * 32 + column] (row = counter / 8),
+//    attribute byte = ExRAM[$3C0 + counter / 32 * 8 + column / 4]; the
+//    MMC5 selects the column's 2-bit pair itself and answers it copied
+//    into all four positions (the PPU picks the pair by its own scroll
+//    position, unrelated to the split's)
+//  - the counter counts +1 per line; after 239 it wraps to 0, 240-255
+//    count on to 255 and then wrap to 0
+//  - the prefetch, the two dummy reads and the next line's first tile read
+//    (reads 160-170, before the line is detected) use the next line's value
+// Not covered: the first two tiles of line 0 (fetched on the pre-render
+// line, before "in frame") - as with the extended attributes.
 //
 // Extended attributes ($5104 = 1, rendering on, in frame, background
 // fetches only): for each tile the ExRAM byte at the nametable address
@@ -65,7 +92,9 @@ module map_mmc5 (
     output [7:0]   cpu_do,
     output         cpu_oe,
     output [7:0]   ppu_do,
-    output         ppu_oe
+    output         ppu_oe,
+    input  [7:0]   aud_gain,     // $89: 128 = 1.0
+    output         aud           // sigma-delta audio (cpu_exp)
 );
 
     // ================================================================ CPU side (mclk)
@@ -83,6 +112,9 @@ module map_mmc5 (
     reg [7:0] prg_r3    = 8'd0;      // $5116
     reg [7:0] prg_r4    = 8'hFF;     // $5117 (ROM only)
     reg [1:0] chr_hi    = 2'd0;      // $5130
+    reg [7:0] sp_ctl    = 8'd0;      // $5200
+    reg [7:0] sp_scr    = 8'd0;      // $5201
+    reg [7:0] sp_bank   = 8'd0;      // $5202
     reg [7:0] irq_cmp   = 8'd0;      // $5203
     reg       irq_en    = 1'b0;      // $5204 bit 7
     reg [7:0] mul_a     = 8'd0;      // $5205
@@ -118,6 +150,7 @@ module map_mmc5 (
             ex_mode <= 2'd3;   nt_map <= 8'd0;    fill_tile <= 8'd0; fill_attr <= 2'd0;
             prg_r0 <= 8'd0;    prg_r1 <= 8'd0;    prg_r2 <= 8'd0;    prg_r3 <= 8'd0;
             prg_r4 <= 8'hFF;   chr_hi <= 2'd0;    irq_cmp <= 8'd0;   irq_en <= 1'b0;
+            sp_ctl <= 8'd0;    sp_scr <= 8'd0;    sp_bank <= 8'd0;
             mul_a <= 8'd0;     mul_b <= 8'd0;     spr16 <= 1'b0;     subst <= 1'b0;
             last_b <= 1'b0;
             for (i = 0; i < 12; i = i + 1) chr_r[i] <= 10'd0;
@@ -146,6 +179,9 @@ module map_mmc5 (
                     12'h116: prg_r3    <= cpu_dat;
                     12'h117: prg_r4    <= cpu_dat;
                     12'h130: chr_hi    <= cpu_dat[1:0];
+                    12'h200: sp_ctl    <= cpu_dat;
+                    12'h201: sp_scr    <= cpu_dat;
+                    12'h202: sp_bank   <= cpu_dat;
                     12'h203: irq_cmp   <= cpu_dat;
                     12'h204: irq_en    <= cpu_dat[7];
                     12'h205: mul_a     <= cpu_dat;
@@ -229,6 +265,8 @@ module map_mmc5 (
     reg [1:0]  idle = 2'd0;          // M2 rising edges without a PPU read
     reg        pend = 1'b0;          // IRQ pending
     reg [7:0]  cmp_s = 8'd0;         // $5203, sampled in this domain
+    reg [7:0]  spc_s = 8'd0, sps_s = 8'd0, spb_s = 8'd0;   // $5200-$5202, sampled
+    reg [7:0]  sp_y = 8'd0;          // split line counter (current line)
     reg [9:0]  pw_a = 10'd0;         // PPU write to ExRAM
     reg [7:0]  pw_d = 8'd0;
     reg        pw_go = 1'b0;
@@ -249,6 +287,33 @@ module map_mmc5 (
     wire spr_fetch = (rd_idx >= 8'd128) && (rd_idx <= 8'd159);
     wire third   = nt_read && rd_addr == last_addr && match == 2'd2;
 
+    // vertical split: column and kind of the current background read
+    reg  [5:0] sp_col;               // screen column 0-33
+    reg  [1:0] sp_typ;               // 0 nametable, 1 attribute, 2/3 pattern
+    reg        sp_bg, sp_nxt;        // a background read / uses the next line's value
+    always @* begin
+        sp_col = 6'd2;  sp_typ = 2'd0;  sp_bg = 1'b0;  sp_nxt = 1'b0;
+        if (rd_idx <= 8'd127) begin                      // the line's tiles: columns 2-33
+            sp_bg = 1'b1;  sp_col = { 1'b0, rd_idx[6:2] } + 6'd2;  sp_typ = rd_idx[1:0];
+        end else if (rd_idx >= 8'd160 && rd_idx <= 8'd167) begin   // prefetch: 0, 1
+            sp_bg = 1'b1;  sp_nxt = 1'b1;  sp_col = { 5'd0, rd_idx[2] };  sp_typ = rd_idx[1:0];
+        end else if (rd_idx >= 8'd168 && rd_idx <= 8'd170) begin   // dummies + read 0
+            sp_bg = 1'b1;  sp_nxt = 1'b1;
+        end
+    end
+    wire [7:0] sp_yn = (sp_y == 8'd239) ? 8'd0 : sp_y + 8'd1;
+    wire [7:0] sp_ys = sp_nxt ? sp_yn : sp_y;
+    wire       sp_side = spc_s[6] ? (sp_col >= { 1'b0, spc_s[4:0] }) : (sp_col < { 1'b0, spc_s[4:0] });
+    // off with ExRAM modes 2/3 and with $2001 rendering bits clear (wiki), as ext_on
+    wire       sp_in = spc_s[7] && !ex_mode[1] && subst && in_frame && sp_bg && sp_side;
+    wire       sp_nt = sp_in && sp_typ == 2'd0 && ppu_addr[13];
+    wire       sp_at = sp_in && sp_typ == 2'd1 && ppu_addr[13];
+    wire       sp_pt = sp_in && sp_typ[1];
+    // ExRAM address of the split's nametable / attribute byte, else the PPU's
+    wire [9:0] qb_a = (sp_in && sp_typ == 2'd0) ? { sp_ys[7:3], sp_col[4:0] } :
+                      (sp_in && sp_typ == 2'd1) ? { 4'hF, sp_ys[7:5], sp_col[4:2] } :
+                                                  ppu_addr[9:0];
+
     // nametable slot of the current PPU address ($5105: 2 bits per 1 KB)
     wire [1:0] nt_slot = nt_map >> { ppu_addr[11:10], 1'b0 };
 
@@ -263,6 +328,9 @@ module map_mmc5 (
         clr_p <= clr_s[1];
         exw_p <= exw_s[1];
         cmp_s <= irq_cmp;
+        spc_s <= sp_ctl;
+        sps_s <= sp_scr;
+        spb_s <= sp_bank;
         pw_go <= 1'b0;
 
         if (rst) begin
@@ -298,7 +366,9 @@ module map_mmc5 (
                         in_frame <= 1'b1;
                         scan     <= 8'd0;
                         pend     <= 1'b0;
+                        sp_y     <= sps_s;               // split counter: $5201 at line 0
                     end else begin
+                        sp_y <= sp_yn;
                         scan <= scan + 8'd1;
                         if (scan + 8'd1 == cmp_s)
                             pend <= 1'b1;
@@ -348,7 +418,17 @@ module map_mmc5 (
         end
     end
 
-    assign irq = pend & irq_en;
+    // ---------------------------------------------------------------- sound
+    wire [7:0]  snd_do;
+    wire        snd_oe, snd_irq;
+    wire [10:0] snd_level;
+    mmc5_snd snd (
+        .mclk(mclk), .rst(rst), .cpu_addr(cpu_addr), .cpu_ce(cpu_ce), .cpu_rw(cpu_rw),
+        .cpu_dat(cpu_dat), .rd_dat(snd_do), .rd_oe(snd_oe), .irq(snd_irq), .level(snd_level)
+    );
+    aud_dac dac (.clk(clk), .level(snd_level), .gain(aud_gain), .aud(aud));
+
+    assign irq = (pend & irq_en) | snd_irq;
 
     // ---------------------------------------------------------------- ExRAM
     // 1 KB, clk domain. Port A: CPU reads ($5C00, address from the bus) and
@@ -367,7 +447,7 @@ module map_mmc5 (
         qa <= exram[aa];
     end
     always @(posedge clk)
-        qb <= exram[ppu_addr[9:0]];
+        qb <= exram[qb_a];
 
     // ---------------------------------------------------------------- CHR
     // register for this fetch: set A ($5120-$5127) or set B ($5128-$512B)
@@ -396,8 +476,10 @@ module map_mmc5 (
         endcase
     end
     // extended attributes: background pattern reads use the latched 4 KB page
-    wire ex_pat = ext_on && bg_fetch && rd_idx[1];
-    assign chr_a   = ex_pat ? { chr_hi[0], ex_lat[5:0], a11, a10 } : cbank;
+    wire ex_pat = ext_on && bg_fetch && rd_idx[1] && !sp_in;
+    // vertical split: the split region's pattern reads use the $5202 page
+    assign chr_a   = sp_pt  ? { spb_s[6:0], a11, a10 } :
+                     ex_pat ? { chr_hi[0], ex_lat[5:0], a11, a10 } : cbank;
     assign chr_sel = ~ppu_addr[13];
     assign chr_wr  = chr_is_ram & ~ppu_addr[13] & ~ppu_wr;
 
@@ -405,14 +487,18 @@ module map_mmc5 (
     // slot 0/1: CIRAM page; 2: ExRAM (modes 0/1; else reads $00); 3: fill.
     // Extended attributes: the background attribute read is answered by the
     // MMC5 with the tile's palette (CIRAM off for that read).
-    wire   ex_at = ext_on && bg_fetch && rd_idx[1:0] == 2'd1 && ppu_addr[13];
-    assign ciram_sel = ppu_addr[13] & ~nt_slot[1] & ~ex_at;
+    // Vertical split: its nametable and attribute reads come from ExRAM.
+    wire   ex_at = ext_on && bg_fetch && rd_idx[1:0] == 2'd1 && ppu_addr[13] && !sp_in;
+    assign ciram_sel = ppu_addr[13] & ~nt_slot[1] & ~ex_at & ~sp_nt & ~sp_at;
     assign ciram_a10 = nt_slot[0];
     wire   attr_area = (ppu_addr[9:6] == 4'hF);              // $23C0-$23FF etc.
-    assign ppu_do = ex_at      ? {4{ex_lat[7:6]}} :
+    wire [7:0] sp_pair = qb >> { sp_ys[4], sp_col[1], 1'b0 };  // the column's 2 bits
+    assign ppu_do = sp_at      ? {4{sp_pair[1:0]}} :
+                    sp_nt      ? qb :
+                    ex_at      ? {4{ex_lat[7:6]}} :
                     nt_slot[0] ? (attr_area ? {4{fill_attr}} : fill_tile)
                                : (ex_mode[1] ? 8'h00 : qb);
-    assign ppu_oe = ~ppu_rd & ppu_addr[13] & (nt_slot[1] | ex_at);
+    assign ppu_oe = ~ppu_rd & ppu_addr[13] & (nt_slot[1] | ex_at | sp_nt | sp_at);
 
     // ---------------------------------------------------------------- CPU reads
     wire [15:0] product = mul_a * mul_b;
@@ -420,9 +506,10 @@ module map_mmc5 (
     wire rd_5205 = reg5 && r == 12'h205;
     wire rd_5206 = reg5 && r == 12'h206;
     wire rd_ex   = exram_c && ex_mode[1];                    // modes 2/3 only
-    assign cpu_do = rd_5204 ? { pend, in_frame, 6'd0 } :
+    assign cpu_do = snd_oe  ? snd_do :
+                    rd_5204 ? { pend, in_frame, 6'd0 } :
                     rd_5205 ? product[7:0] :
                     rd_5206 ? product[15:8] : qa;
-    assign cpu_oe = cpu_rw & (rd_5204 | rd_5205 | rd_5206 | rd_ex);
+    assign cpu_oe = cpu_rw & (rd_5204 | rd_5205 | rd_5206 | rd_ex | snd_oe);
 
 endmodule

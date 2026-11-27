@@ -108,6 +108,8 @@ old_top:    .res 1
 err:        .res 1
 width:      .res 1
 pop_sel:    .res 1          ; popup: highlighted item (0-2)
+mi_n:       .res 1          ; mapinfo.s: number of mappers
+mi_i:       .res 1          ; mapinfo.s: MAPROUT entry
 
 ; FAT32 writing (fatw.s)
 nfats:      .res 1          ; number of FAT copies
@@ -377,7 +379,7 @@ main_loop:
     lda joy_new
     and #BTN_SELECT
     beq @none
-    jsr popup
+    jsr map_info            ; SUPPORTED MAPPERS (mapinfo.s)
 @none:
     jmp main_loop
 
@@ -469,8 +471,9 @@ activate:
     ldy #REC_ATTR
     lda (rec),y
     and #$10
-    beq start_file
-    ; enter folder
+    bne @folder
+    jmp popup               ; file: the file menu (SELECT + LOAD starts it)
+@folder:
     lda depth
     cmp #16
     bcs @deep
@@ -515,7 +518,7 @@ start_file:
     jmp redraw
 
 ; ---------------------------------------------------------------- popup
-; Select on a file: a box over the list (FILE MENU) with SELECT + LOAD,
+; A on a file: a box over the list (FILE MENU) with SELECT + LOAD,
 ; SELECT ONLY, ROM INFO. Up/Down moves the highlight, A confirms, B closes.
 ; Drawn and removed with rendering on, a few rows per vblank (no black
 ; frame). The box covers columns 8-23, rows 4-19: whole attribute bytes, so
@@ -948,7 +951,7 @@ draw_status:
     PRINT "(EMPTY)  B:BACK               "
     rts
 @help:
-    PRINT "A:OPEN B:BACK SEL:MENU L/R:PG "
+    PRINT "A:MENU B:BACK SEL:MAPS L/R:PG "
     rts
 @err:
     PRINT "ERROR "
@@ -1342,6 +1345,7 @@ nmi:
 .include "ramload.s"
 .include "rominfo.s"
 .include "lastgame.s"
+.include "mapinfo.s"
 .ifdef SDW_TEST
 .include "sdw_test.s"
 .endif

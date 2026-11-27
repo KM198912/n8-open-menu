@@ -85,6 +85,19 @@ read_header:
 ; lookup_core: core_num = MAPROUT.BIN[mapper] ($FF = not supported).
 ; Carry set if /EDFC/MAPROUT.BIN cannot be read (A = $44 or SD error).
 lookup_core:
+    jsr read_maprout
+    bcc @mr_ok
+    rts
+@mr_ok:
+    ldy mapper
+    lda SECBUF,y
+    sta core_num
+    clc
+    rts
+
+; read_maprout: SECBUF = /EDFC/MAPROUT.BIN (512 bytes, one sector).
+; Carry set: A = error ($44 missing, SD/FAT errors).
+read_maprout:
     jsr find_edfc
     bcc @edfc
     lda #$44
@@ -105,15 +118,7 @@ lookup_core:
 @mr:
     MOV32 clus, f_clus
     jsr clus_to_lba
-    jsr sd_read
-    bcc @mr_ok
-    rts
-@mr_ok:
-    ldy mapper
-    lda SECBUF,y
-    sta core_num
-    clc
-    rts
+    jmp sd_read             ; carry/A as sd_read
 
 ; launch: start the game in LIST record `sel`. Returns only on error
 ; (carry set, A = code); CHR pages 0/1 may be overwritten by then.

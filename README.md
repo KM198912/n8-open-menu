@@ -30,7 +30,7 @@ in `docs/hw-interface.md`.
 | UxROM (2) | `102.RBF` |
 | CNROM (3) | `103.RBF` |
 | MMC3 (4) | `104.RBF` |
-| MMC5 (5) | `105.RBF` - banking, ExRAM, fill mode, scanline IRQ, extended attributes; no split screen, no audio yet |
+| MMC5 (5) | `105.RBF` - banking, ExRAM, fill mode, scanline IRQ, extended attributes, split screen, audio (2 pulses + PCM on `cpu_exp`); saves 8 KB only |
 | AxROM (7) | `107.RBF` |
 | VRC6 (24, 26) | `124.RBF`, `126.RBF` - banking, IRQ, audio (2 pulses + saw on `cpu_exp`) |
 | GxROM (66) | `166.RBF` |
@@ -42,7 +42,7 @@ Other clones may differ.
 Full list (the 151 mappers the original firmware supports, with our
 status per mapper): `docs/mappers.md`.
 
-Planned: MMC5 split and audio, FDS. Open items
+Planned: MMC5 saves > 8 KB. Open items
 and test results: `BACKLOG.md`.
 
 ## NTSC games on PAL consoles
